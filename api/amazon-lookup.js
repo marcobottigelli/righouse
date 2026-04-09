@@ -24,19 +24,9 @@ export default async function handler(req, res) {
     if (!searchResp.ok) return res.status(502).json({ error: `amazon search HTTP ${searchResp.status}` })
     const searchHtml = await searchResp.text()
 
-    // Amazon inserisce ref=sr_1_1 SOLO sul primo risultato organico.
-    // È il modo più affidabile per saltare gli sponsorizzati.
-    let asin = null
-    const sr1Match = searchHtml.match(/\/dp\/([A-Z0-9]{10})\/ref=sr_1_1/)
-    if (sr1Match) {
-      asin = sr1Match[1]
-    } else {
-      // Fallback: primo /dp/ASIN che non sia in un blocco sponsorizzato
-      const cleanHtml = searchHtml.replace(/sp-sponsored-result[\s\S]{0,3000}?(?=s-search-result|$)/g, '')
-      const dpMatch = cleanHtml.match(/\/dp\/([A-Z0-9]{10})\//)
-      if (dpMatch) asin = dpMatch[1]
-    }
-    if (!asin) return res.status(404).json({ error: 'not_found' })
+    // DEBUG: restituisce snippet HTML per capire la struttura della pagina
+    const snippet = searchHtml.slice(0, 3000)
+    return res.json({ debug: true, snippet, hasSr1: searchHtml.includes('ref=sr_1_1'), allDpLinks: [...searchHtml.matchAll(/\/dp\/([A-Z0-9]{10})\//g)].map(m=>m[1]).slice(0,10) })
 
     // 2. Apri la pagina prodotto
     const productUrl = `https://www.amazon.it/dp/${asin}`
