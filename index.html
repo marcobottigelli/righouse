@@ -717,7 +717,7 @@ async function lookupEanOnline(ean) {
   // 1. EAN-Search.org — diretta dal browser (GET con token in URL)
   if (appConfig.ean_search_key) {
     try {
-      const url = `https://api.ean-search.org/api?token=${encodeURIComponent(appConfig.ean_search_key)}&ean=${encodeURIComponent(ean)}&format=json`
+      const url = `https://api.ean-search.org/api?token=${encodeURIComponent(appConfig.ean_search_key)}&op=barcode-lookup&ean=${encodeURIComponent(ean)}&format=json`
       const r = await fetch(url)
       const body = await r.text()
       dbg.push(`ean-search: HTTP ${r.status} → ${body.slice(0,120)}`)

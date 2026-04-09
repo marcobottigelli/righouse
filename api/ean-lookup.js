@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   if (ean_search_key) {
     try {
       const r = await fetch(
-        `https://api.ean-search.org/api?token=${ean_search_key}&ean=${ean}&format=json`,
+        `https://api.ean-search.org/api?token=${ean_search_key}&op=barcode-lookup&ean=${ean}&format=json`,
         { headers: { 'User-Agent': 'RigHouse/1.0' } }
       )
       if (r.ok) {
