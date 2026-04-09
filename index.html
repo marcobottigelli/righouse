@@ -768,7 +768,23 @@ async function lookupEanOnline(ean) {
     } catch(e) { dbg.push(`go-upc ERRORE: ${e.message}`) }
   }
 
-  // 3. Proxy Vercel (aggira CORS — passa le chiavi al server)
+  // 3. Amazon.it scraping via proxy Vercel
+  try {
+    const r = await fetch('/api/amazon-lookup', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ean })
+    })
+    dbg.push(`amazon: HTTP ${r.status}`)
+    if (r.ok) {
+      const d = await r.json()
+      if (d.name) {
+        return { name:d.name||null, brand:d.brand||null, category:null,
+                 description:d.description||null, images:d.images||[], data_source:'api' }
+      }
+    }
+  } catch(e) { dbg.push(`amazon ERRORE: ${e.message}`) }
+
+  // 4. Proxy Vercel (ean-search + upcitemdb server-side)
   try {
     const r = await fetch('/api/ean-lookup', {
       method:'POST', headers:{'Content-Type':'application/json'},
