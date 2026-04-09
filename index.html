@@ -771,24 +771,7 @@ async function lookupAllSources(ean) {
     } catch(e) {}
   }
 
-  const tryAmazon = async () => {
-    try {
-      const r = await fetch('/api/amazon-lookup', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ ean })
-      })
-      if (r.ok) {
-        const d = await r.json()
-        if (d.name) {
-          results.push({ source:'amazon', label:'Amazon.it',
-            name:d.name||null, brand:d.brand||null, category:null,
-            description:d.description||null, images:d.images||[], data_source:'api' })
-        }
-      }
-    } catch(e) {}
-  }
-
-  const tryEanProxy = async () => {
+const tryEanProxy = async () => {
     try {
       const r = await fetch('/api/ean-lookup', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -829,7 +812,7 @@ async function lookupAllSources(ean) {
     } catch(e) {}
   }
 
-  await Promise.allSettled([tryEanSearch(), tryGoUpc(), tryAmazon(), tryEanProxy(), tryOpenFood()])
+  await Promise.allSettled([tryEanSearch(), tryGoUpc(), tryEanProxy(), tryOpenFood()])
   return results
 }
 
