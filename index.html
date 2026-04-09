@@ -363,6 +363,12 @@ create policy "anon_rw" on config
       <p id="add-ean-msg" class="text-xs mt-2 hidden"></p>
     </div>
 
+    <!-- Source picker (shown when multiple sources found) -->
+    <div id="add-source-picker" class="hidden mt-5 space-y-2">
+      <p class="text-sm font-medium text-gray-700">Trovato su più fonti — scegli quale usare:</p>
+      <div id="add-source-options" class="space-y-2"></div>
+    </div>
+
     <!-- Product form (revealed after EAN search) -->
     <div id="add-step-form" class="hidden mt-5 space-y-3">
       <div id="add-found-banner" class="hidden p-3 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-700"></div>
@@ -726,103 +732,112 @@ async function sbUploadImage(ean, blob) {
 }
 
 // ─── EAN LOOKUP ────────────────────────────────────────────────────────────
-async function lookupEanOnline(ean) {
-  const dbg = []
+// Ritorna array di { source, label, name, brand, category, description, images, data_source }
+async function lookupAllSources(ean) {
+  const results = []
 
-  // 1. EAN-Search.org — diretta dal browser (GET con token in URL)
-  if (appConfig.ean_search_key) {
+  const tryEanSearch = async () => {
+    if (!appConfig.ean_search_key) return
     try {
       const url = `https://api.ean-search.org/api?token=${encodeURIComponent(appConfig.ean_search_key)}&op=barcode-lookup&ean=${encodeURIComponent(ean)}&format=json`
       const r = await fetch(url)
-      const body = await r.text()
-      dbg.push(`ean-search: HTTP ${r.status} → ${body.slice(0,120)}`)
       if (r.ok) {
-        const data = JSON.parse(body)
-        dbg.push(`ean-search trovato: ${JSON.stringify(data).slice(0,80)}`)
+        const data = await r.json()
         if (Array.isArray(data) && data.length && data[0].name) {
           const p = data[0]
-          return { name:p.name||null, brand:null, category:p.categoryName||null,
-                   description:null, images:[], data_source:'api' }
+          results.push({ source:'ean-search', label:'EAN-Search',
+            name:p.name||null, brand:null, category:p.categoryName||null,
+            description:null, images:[], data_source:'api' })
         }
       }
-    } catch(e) { dbg.push(`ean-search ERRORE: ${e.message}`) }
-  } else {
-    dbg.push('ean-search: token non configurato')
+    } catch(e) {}
   }
 
-  // 2. Go-UPC — diretta dal browser
-  if (appConfig.go_upc_key) {
+  const tryGoUpc = async () => {
+    if (!appConfig.go_upc_key) return
     try {
       const r = await fetch(`https://api.go-upc.com/v1/code/${encodeURIComponent(ean)}`, {
         headers: { 'Authorization': `Bearer ${appConfig.go_upc_key}` }
       })
-      dbg.push(`go-upc: HTTP ${r.status}`)
       if (r.ok) {
         const data = await r.json()
         const p = data.product
         if (p && p.name) {
-          return { name:p.name||null, brand:p.brand||null, category:p.category||null,
-                   description:p.description||null, images:p.imageUrl?[p.imageUrl]:[], data_source:'api' }
+          results.push({ source:'go-upc', label:'Go-UPC',
+            name:p.name||null, brand:p.brand||null, category:p.category||null,
+            description:p.description||null, images:p.imageUrl?[p.imageUrl]:[], data_source:'api' })
         }
       }
-    } catch(e) { dbg.push(`go-upc ERRORE: ${e.message}`) }
+    } catch(e) {}
   }
 
-  // 3. Amazon.it scraping via proxy Vercel
-  try {
-    const r = await fetch('/api/amazon-lookup', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ ean })
-    })
-    dbg.push(`amazon: HTTP ${r.status}`)
-    if (r.ok) {
-      const d = await r.json()
-      if (d.name) {
-        return { name:d.name||null, brand:d.brand||null, category:null,
-                 description:d.description||null, images:d.images||[], data_source:'api' }
-      }
-    }
-  } catch(e) { dbg.push(`amazon ERRORE: ${e.message}`) }
-
-  // 4. Proxy Vercel (ean-search + upcitemdb server-side)
-  try {
-    const r = await fetch('/api/ean-lookup', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        ean,
-        ean_search_key: appConfig.ean_search_key || null,
-        go_upc_key:     appConfig.go_upc_key     || null,
+  const tryAmazon = async () => {
+    try {
+      const r = await fetch('/api/amazon-lookup', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ ean })
       })
-    })
-    dbg.push(`vercel-proxy: HTTP ${r.status}`)
-    if (r.ok) {
-      const d = await r.json()
-      if (d.name || d.brand) {
-        return { name:d.name||null, brand:d.brand||null, category:d.category||null,
-                 description:d.description||null, images:d.images||[], data_source:'api' }
+      if (r.ok) {
+        const d = await r.json()
+        if (d.name) {
+          results.push({ source:'amazon', label:'Amazon.it',
+            name:d.name||null, brand:d.brand||null, category:null,
+            description:d.description||null, images:d.images||[], data_source:'api' })
+        }
       }
-    }
-  } catch(e) { dbg.push(`vercel-proxy ERRORE: ${e.message}`) }
+    } catch(e) {}
+  }
 
-  console.warn('[EAN debug]', dbg.join(' | '))
-  window._eanDbg = dbg.join(' · ')
-
-  // 4. Open Food Facts (cibo)
-  try {
-    const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${ean}.json`)
-    if (r.ok) {
-      const d = await r.json()
-      if (d.status===1 && d.product) {
-        const p = d.product
-        const img = p.image_url || p.image_front_url || null
-        return { name:p.product_name_it||p.product_name||null,
-                 brand:p.brands?p.brands.split(',')[0].trim():null,
-                 category:null, description:null,
-                 images:img?[img]:[], data_source:'api' }
+  const tryEanProxy = async () => {
+    try {
+      const r = await fetch('/api/ean-lookup', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ ean, ean_search_key: appConfig.ean_search_key||null, go_upc_key: appConfig.go_upc_key||null })
+      })
+      if (r.ok) {
+        const d = await r.json()
+        if (d.name || d.brand) {
+          const label = { 'ean-search':'EAN-Search', 'go-upc':'Go-UPC', 'upcitemdb':'UPCitemdb' }[d.source] || d.source
+          // evita duplicati con risultati già trovati in modo diretto
+          if (!results.find(x => x.source === d.source)) {
+            results.push({ source:d.source||'proxy', label,
+              name:d.name||null, brand:d.brand||null, category:d.category||null,
+              description:d.description||null, images:d.images||[], data_source:'api' })
+          }
+        }
       }
-    }
-  } catch(e) {}
-  return null
+    } catch(e) {}
+  }
+
+  const tryOpenFood = async () => {
+    try {
+      const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${ean}.json`)
+      if (r.ok) {
+        const d = await r.json()
+        if (d.status===1 && d.product) {
+          const p = d.product
+          const img = p.image_url || p.image_front_url || null
+          if (p.product_name_it || p.product_name) {
+            results.push({ source:'openfoodfacts', label:'Open Food Facts',
+              name:p.product_name_it||p.product_name||null,
+              brand:p.brands?p.brands.split(',')[0].trim():null,
+              category:null, description:null,
+              images:img?[img]:[], data_source:'api' })
+          }
+        }
+      }
+    } catch(e) {}
+  }
+
+  await Promise.allSettled([tryEanSearch(), tryGoUpc(), tryAmazon(), tryEanProxy(), tryOpenFood()])
+  return results
+}
+
+// Compatibilità con chiamate esistenti — ritorna il primo risultato
+async function lookupEanOnline(ean) {
+  const results = await lookupAllSources(ean)
+  window._eanDbg = results.length ? results.map(r=>`${r.label}: ${r.name}`).join(' · ') : 'nessuna fonte ha trovato risultati'
+  return results.length ? results[0] : null
 }
 
 // ─── OPENAI VISION ─────────────────────────────────────────────────────────
@@ -1343,6 +1358,8 @@ function openAddModal(){
   document.getElementById('add-found-banner').classList.add('hidden')
   document.getElementById('add-notfound-banner').classList.add('hidden')
   document.getElementById('add-debug-banner').classList.add('hidden')
+  document.getElementById('add-source-picker').classList.add('hidden')
+  document.getElementById('add-source-options').innerHTML = ''
   document.getElementById('add-photo-file').value=''
   document.getElementById('add-ai-status').textContent=''
   document.getElementById('add-modal').classList.remove('hidden')
@@ -1364,24 +1381,50 @@ async function searchEan(){
       showToast('EAN già in database — aperto in modifica','info'); return
     }
     addCurrentEan=ean
-    const found=await lookupEanOnline(ean)
-    document.getElementById('add-step-form').classList.remove('hidden')
-    if(found){
-      document.getElementById('add-found-banner').textContent='✓ Trovato: '+(found.name||'dati parziali')
-      document.getElementById('add-found-banner').classList.remove('hidden')
-      document.getElementById('add-notfound-banner').classList.add('hidden')
-      if(found.name)        document.getElementById('add-name').value=found.name
-      if(found.brand)       document.getElementById('add-brand').value=found.brand
-      if(found.description) document.getElementById('add-desc').value=found.description
-    }else{
-      document.getElementById('add-found-banner').classList.add('hidden')
-      const nb = document.getElementById('add-notfound-banner')
-      nb.innerHTML = '⚠ Prodotto non trovato online. Compila i campi o usa la foto per l\'analisi AI.'
-        + (window._eanDbg ? `<br><span class="font-mono text-xs opacity-60">${window._eanDbg}</span>` : '')
-      nb.classList.remove('hidden')
+    const results=await lookupAllSources(ean)
+    if(results.length > 1){
+      // Più fonti trovate: mostra selettore
+      document.getElementById('add-source-picker').classList.remove('hidden')
+      document.getElementById('add-step-form').classList.add('hidden')
+      const container=document.getElementById('add-source-options')
+      container.innerHTML=''
+      results.forEach((res,i)=>{
+        const btn=document.createElement('button')
+        btn.type='button'
+        btn.className='w-full text-left px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-brand-500 hover:bg-brand-50 transition-colors bg-white'
+        btn.innerHTML=`<div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <span class="text-xs font-semibold text-brand-600 uppercase tracking-wide">${res.label}</span>
+            <p class="text-sm text-gray-800 mt-0.5 truncate">${res.name||'(nome non disponibile)'}</p>
+            ${res.brand?`<p class="text-xs text-gray-400">${res.brand}</p>`:''}
+          </div>
+          <span class="text-brand-500 text-lg flex-shrink-0">→</span>
+        </div>`
+        btn.onclick=()=>applyLookupResult(res)
+        container.appendChild(btn)
+      })
+    } else {
+      document.getElementById('add-source-picker').classList.add('hidden')
+      applyLookupResult(results[0]||null)
     }
   }catch(e){showEanMsg('Errore: '+e.message,'error')}
   finally{setBtn('add-search',false)}
+}
+
+function applyLookupResult(found){
+  document.getElementById('add-source-picker').classList.add('hidden')
+  document.getElementById('add-step-form').classList.remove('hidden')
+  if(found){
+    document.getElementById('add-found-banner').textContent='✓ '+found.label+': '+(found.name||'dati parziali')
+    document.getElementById('add-found-banner').classList.remove('hidden')
+    document.getElementById('add-notfound-banner').classList.add('hidden')
+    if(found.name)        document.getElementById('add-name').value=found.name
+    if(found.brand)       document.getElementById('add-brand').value=found.brand
+    if(found.description) document.getElementById('add-desc').value=found.description
+  }else{
+    document.getElementById('add-found-banner').classList.add('hidden')
+    document.getElementById('add-notfound-banner').classList.remove('hidden')
+  }
 }
 
 function showEanMsg(msg,type){
