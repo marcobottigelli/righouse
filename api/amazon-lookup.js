@@ -24,10 +24,29 @@ export default async function handler(req, res) {
     if (!searchResp.ok) return res.status(502).json({ error: `amazon search HTTP ${searchResp.status}` })
     const searchHtml = await searchResp.text()
 
-    // Estrai il primo ASIN dalla pagina di ricerca
-    const asinMatch = searchHtml.match(/data-asin="([A-Z0-9]{10})"/)
-    if (!asinMatch) return res.status(404).json({ error: 'not_found' })
-    const asin = asinMatch[1]
+    // Estrai l'ASIN del primo risultato ORGANICO (non sponsorizzato).
+    // I risultati sponsorizzati hanno data-component-type="sp-sponsored-result"
+    // oppure compaiono prima di data-index="0".
+    // Strategia: rimuovi i blocchi sponsorizzati, poi prendi il primo data-asin.
+    const cleanHtml = searchHtml
+      .replace(/data-component-type="sp-sponsored-result"[\s\S]*?(?=data-component-type="s-search-result"|$)/g, '')
+      .replace(/class="[^"]*AdHolder[^"]*"[\s\S]{0,2000}?(?=<div data-component-type|$)/g, '')
+
+    // Cerca prima data-index="0" con data-asin sullo stesso elemento
+    let asin = null
+    const indexedMatch = cleanHtml.match(/data-index="0"[^>]*data-asin="([A-Z0-9]{10})"|data-asin="([A-Z0-9]{10})"[^>]*data-index="0"/)
+    if (indexedMatch) {
+      asin = indexedMatch[1] || indexedMatch[2]
+    } else {
+      // Fallback: primo /dp/ASIN link (link prodotto organico)
+      const dpMatch = cleanHtml.match(/\/dp\/([A-Z0-9]{10})\//)
+      if (dpMatch) asin = dpMatch[1]
+      else {
+        const asinMatch = cleanHtml.match(/data-asin="([A-Z0-9]{10})"/)
+        if (asinMatch) asin = asinMatch[1]
+      }
+    }
+    if (!asin) return res.status(404).json({ error: 'not_found' })
 
     // 2. Apri la pagina prodotto
     const productUrl = `https://www.amazon.it/dp/${asin}`
