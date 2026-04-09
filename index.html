@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RigHouse — Product Manager</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700;900&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      fontFamily: { heading:['Fraunces','serif'], body:['DM Sans','sans-serif'] },
+      colors: { brand:{ 50:'#f0f7f2',100:'#dceee2',200:'#b8ddc5',500:'#2d7a4f',600:'#246040',700:'#1a4a31' } }
+    }}
+  }
+</script>
+<style>
+  body{font-family:'DM Sans',sans-serif;background:#f4f7f5;color:#111c16}
+  h1,h2,h3{font-family:'Fraunces',serif}
+  .card{box-shadow:0 1px 3px rgba(20,50,30,.06),0 4px 12px rgba(20,50,30,.04)}
+  .spin{animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  tbody tr:hover{background:#f0f7f2}
+  #toast{transition:opacity .3s,transform .3s}
+  /* prevent iOS zoom on input focus */
+  @media(max-width:640px){input,select,textarea{font-size:16px!important}}
+  /* filter scroll */
+  #filter-btns{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;flex-wrap:nowrap}
+  #filter-btns::-webkit-scrollbar{display:none}
+  /* photo drop zone */
+  .drop-zone{border:2px dashed #b8ddc5;transition:border-color .2s,background .2s;cursor:pointer}
+  .drop-zone.drag-over,.drop-zone:hover{border-color:#2d7a4f;background:#f0f7f2}
+  /* full-screen modals on mobile */
+  @media(max-width:640px){
+    .modal-sheet{position:fixed!important;bottom:0!important;left:0!important;right:0!important;top:auto!important;border-radius:1.5rem 1.5rem 0 0!important;max-width:100%!important;width:100%!important;margin:0!important;max-height:92vh;overflow-y:auto}
+  }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- TOAST -->
+<div id="toast" class="fixed top-5 right-5 z-50 opacity-0 pointer-events-none bg-gray-900 text-white text-sm px-4 py-3 rounded-xl shadow-xl max-w-xs"></div>
+
+<!-- HEADER -->
+<header class="bg-white border-b border-gray-200 sticky top-0 z-20">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-brand-500">
+        <span class="text-white text-xs font-bold font-heading">R</span>
+      </div>
+      <span class="font-heading font-bold text-lg text-brand-600">RigHouse</span>
+    </div>
+    <!-- Desktop nav -->
+    <nav class="hidden sm:flex gap-1">
+      <button onclick="showPage('dashboard')" id="nav-dashboard"
+        class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">Dashboard</button>
+      <button onclick="showPage('products')" id="nav-products"
+        class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">Prodotti</button>
+    </nav>
+    <div class="flex items-center gap-3">
+      <button onclick="openSettings()" title="Impostazioni"
+        class="text-gray-400 hover:text-gray-600 transition-colors text-lg">⚙️</button>
+      <span id="conn-dot" class="w-2 h-2 rounded-full bg-gray-300"></span>
+      <span id="conn-label" class="text-xs text-gray-400 hidden sm:block">Connessione...</span>
+    </div>
+  </div>
+</header>
+
+<!-- SCANNER MODAL -->
+<div id="scan-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black">
+  <div class="relative w-full h-full max-w-lg mx-auto flex flex-col">
+    <div class="flex items-center justify-between px-4 py-3 bg-black">
+      <span class="text-white font-medium">Inquadra il barcode</span>
+      <button onclick="stopScanner()" class="text-white text-2xl leading-none px-2">✕</button>
+    </div>
+    <div class="flex-1 relative overflow-hidden">
+      <video id="scan-video" class="w-full h-full object-cover" playsinline muted></video>
+      <!-- Viewfinder overlay -->
+      <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div class="w-64 h-32 border-2 border-white rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]">
+          <div class="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-brand-400 rounded-tl"></div>
+          <div class="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-brand-400 rounded-tr"></div>
+          <div class="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-brand-400 rounded-bl"></div>
+          <div class="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-brand-400 rounded-br"></div>
+        </div>
+      </div>
+    </div>
+    <p id="scan-hint" class="text-center text-white/70 text-sm py-4 bg-black">Avvicina la fotocamera al barcode del prodotto</p>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div id="settings-modal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
+  <div class="modal-sheet bg-white rounded-2xl shadow-2xl w-full sm:max-w-lg relative">
+    <div class="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+      <div>
+        <h3 class="text-xl font-heading font-semibold">Configurazione API</h3>
+        <p class="text-xs text-gray-400 mt-0.5">Le chiavi sono cifrate (AES-256) prima di essere salvate nel database.</p>
+      </div>
+      <button onclick="closeSettings()" class="text-gray-400 hover:text-gray-600 text-xl ml-4">✕</button>
+    </div>
+    <!-- Loading -->
+    <div id="cfg-loading" class="p-6 text-center text-sm text-gray-400">
+      <div class="inline-block w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full spin mb-2"></div>
+      <p>Caricamento configurazione...</p>
+    </div>
+    <!-- Error: table missing -->
+    <div id="cfg-missing" class="hidden p-6">
+      <p class="text-sm text-red-600 font-medium mb-2">⚠ Tabella <code>config</code> non trovata nel database.</p>
+      <p class="text-xs text-gray-500 mb-3">Esegui questo SQL nel tuo progetto Supabase (SQL Editor):</p>
+      <pre class="bg-gray-900 text-green-400 text-xs rounded-xl p-4 overflow-x-auto leading-relaxed">create table config (
+  key text primary key,
+  value text not null,
+  updated_at timestamptz default now()
+);
+alter table config enable row level security;
+create policy "anon_rw" on config
+  for all to anon using (true) with check (true);</pre>
+      <button onclick="openSettings()" class="mt-4 w-full py-2.5 rounded-xl text-sm font-medium bg-brand-500 text-white hover:bg-brand-600">↻ Riprova</button>
+    </div>
+    <!-- Config fields -->
+    <div id="cfg-content" class="hidden overflow-y-auto" style="max-height:70vh">
+      <div class="p-6 space-y-6" id="cfg-sections"></div>
+    </div>
+    <div id="cfg-footer" class="hidden px-6 pb-6 pt-2">
+      <p class="text-xs text-gray-400 text-center">🔑 Chiave dispositivo salvata nel browser — su altri dispositivi le chiavi vanno reinserite.</p>
+    </div>
+  </div>
+</div>
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24 sm:pb-10">
+
+  <!-- ── DASHBOARD ── -->
+  <section id="page-dashboard">
+    <div class="mb-5">
+      <h1 class="text-2xl sm:text-3xl font-heading font-bold text-gray-900">Dashboard</h1>
+      <p class="text-gray-500 mt-1 text-sm">
+        <a href="https://shop.righouse.it" target="_blank" class="text-brand-600 hover:underline">shop.righouse.it ↗</a>
+      </p>
+    </div>
+    <div id="dash-loading" class="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-pulse mb-6">
+      <div class="h-24 bg-gray-100 rounded-2xl"></div><div class="h-24 bg-gray-100 rounded-2xl"></div>
+      <div class="h-24 bg-gray-100 rounded-2xl"></div><div class="h-24 bg-gray-100 rounded-2xl"></div>
+    </div>
+    <div id="dash-content" class="hidden">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
+        <div class="bg-white rounded-2xl p-4 card border border-gray-100">
+          <p class="text-xs font-medium text-gray-400 uppercase tracking-wide">Totale</p>
+          <p id="s-total" class="text-3xl font-heading font-bold mt-1 text-brand-600">—</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 card border border-gray-100">
+          <p class="text-xs font-medium text-gray-400 uppercase tracking-wide">Via API</p>
+          <p id="s-api" class="text-3xl font-heading font-bold mt-1 text-blue-600">—</p>
+          <p id="s-api-pct" class="text-xs text-gray-400 mt-1">—</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 card border border-gray-100">
+          <p class="text-xs font-medium text-gray-400 uppercase tracking-wide">Da compilare</p>
+          <p id="s-pending" class="text-3xl font-heading font-bold mt-1 text-amber-600">—</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 card border border-gray-100">
+          <p class="text-xs font-medium text-gray-400 uppercase tracking-wide">Con foto</p>
+          <p id="s-images" class="text-3xl font-heading font-bold mt-1 text-purple-600">—</p>
+          <p id="s-noimages" class="text-xs text-gray-400 mt-1">—</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 card border border-gray-100 mb-4">
+        <h2 class="text-base font-heading font-semibold mb-3">Shopify</h2>
+        <div class="grid grid-cols-3 gap-3 mb-3">
+          <div class="text-center p-3 rounded-xl bg-green-50 border border-green-100">
+            <p id="sh-up" class="text-2xl font-heading font-bold text-green-600">—</p>
+            <p class="text-xs text-green-600 mt-1">Caricati</p>
+          </div>
+          <div class="text-center p-3 rounded-xl bg-amber-50 border border-amber-100">
+            <p id="sh-pend" class="text-2xl font-heading font-bold text-amber-600">—</p>
+            <p class="text-xs text-amber-600 mt-1">Pending</p>
+          </div>
+          <div class="text-center p-3 rounded-xl bg-red-50 border border-red-100">
+            <p id="sh-err" class="text-2xl font-heading font-bold text-red-600">—</p>
+            <p class="text-xs text-red-600 mt-1">Errori</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+            <div id="sh-bar" class="h-2 rounded-full bg-brand-500 transition-all duration-700" style="width:0%"></div>
+          </div>
+          <span id="sh-pct" class="text-xs text-gray-500 w-9 text-right">0%</span>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 card border border-gray-100 mb-6">
+        <h2 class="text-base font-heading font-semibold mb-3">Amazon</h2>
+        <div class="grid grid-cols-3 gap-3 mb-3">
+          <div class="text-center p-3 rounded-xl bg-green-50 border border-green-100">
+            <p id="az-up" class="text-2xl font-heading font-bold text-green-600">—</p>
+            <p class="text-xs text-green-600 mt-1">Caricati</p>
+          </div>
+          <div class="text-center p-3 rounded-xl bg-amber-50 border border-amber-100">
+            <p id="az-pend" class="text-2xl font-heading font-bold text-amber-600">—</p>
+            <p class="text-xs text-amber-600 mt-1">Pending</p>
+          </div>
+          <div class="text-center p-3 rounded-xl bg-red-50 border border-red-100">
+            <p id="az-err" class="text-2xl font-heading font-bold text-red-600">—</p>
+            <p class="text-xs text-red-600 mt-1">Errori</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+            <div id="az-bar" class="h-2 rounded-full transition-all duration-700" style="width:0%;background:#FF9900"></div>
+          </div>
+          <span id="az-pct" class="text-xs text-gray-500 w-9 text-right">0%</span>
+        </div>
+      </div>
+      <div>
+        <h2 class="text-sm font-heading font-semibold text-gray-700 mb-3">Azioni rapide</h2>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="showPage('products','shopify_pending')"
+            class="px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-brand-500 hover:bg-brand-600">
+            Shopify pending (<span id="qa-sh">—</span>)
+          </button>
+          <button onclick="showPage('products','amazon_pending')"
+            class="px-4 py-2.5 rounded-xl text-sm font-medium text-white hover:opacity-90" style="background:#FF9900">
+            Amazon pending (<span id="qa-az">—</span>)
+          </button>
+          <button onclick="showPage('products','missing_data')"
+            class="px-4 py-2.5 rounded-xl text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300">
+            Dati mancanti (<span id="qa-miss">—</span>)
+          </button>
+        </div>
+      </div>
+    </div>
+    <div id="dash-empty" class="hidden text-center py-20">
+      <p class="text-5xl mb-4">📦</p>
+      <p class="text-xl font-heading text-gray-600">Nessun prodotto nel database.</p>
+      <button onclick="openAddModal()" class="mt-4 px-6 py-3 rounded-xl text-white font-medium bg-brand-500 hover:bg-brand-600">
+        + Aggiungi il primo prodotto
+      </button>
+    </div>
+  </section>
+
+  <!-- ── PRODUCTS ── -->
+  <section id="page-products" class="hidden">
+    <div class="flex items-start justify-between mb-5">
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-heading font-bold text-gray-900">Prodotti</h1>
+        <p id="prod-count" class="text-gray-500 mt-1 text-sm">Caricamento...</p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="loadProducts()" class="px-3 py-2 text-sm font-medium rounded-xl bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 card">↻</button>
+        <button onclick="openAddModal()" class="px-4 py-2 text-sm font-medium rounded-xl text-white bg-brand-500 hover:bg-brand-600">+ Prodotto</button>
+      </div>
+    </div>
+    <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-4 card">
+      <input id="search-input" type="text" placeholder="Cerca EAN, nome o brand..."
+        class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 mb-3"
+        oninput="debounceSearch()">
+      <div class="flex gap-2" id="filter-btns"></div>
+    </div>
+    <div id="bulk-bar" class="hidden bg-brand-50 border border-brand-200 rounded-2xl p-3 mb-4 flex items-center gap-3 text-sm">
+      <span id="bulk-count" class="font-medium text-brand-700"></span>
+      <button onclick="bulkUpload('shopify')" class="px-3 py-1.5 rounded-lg font-medium text-white bg-brand-500 text-xs">↑ Shopify</button>
+      <button onclick="bulkUpload('amazon')" class="px-3 py-1.5 rounded-lg font-medium text-white text-xs" style="background:#FF9900">↑ Amazon</button>
+      <button onclick="clearSelection()" class="ml-auto text-gray-400 hover:text-gray-600 text-xl">✕</button>
+    </div>
+    <div id="prod-error" class="hidden bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 mb-4 text-sm"></div>
+    <!-- Desktop table -->
+    <div class="hidden sm:block bg-white rounded-2xl border border-gray-100 overflow-hidden card">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-100 bg-gray-50">
+              <th class="p-3 w-10"><input type="checkbox" id="select-all" onchange="toggleSelectAll()" class="rounded cursor-pointer"></th>
+              <th class="p-3 text-left font-medium text-gray-500 w-14">Foto</th>
+              <th class="p-3 text-left font-medium text-gray-500">EAN</th>
+              <th class="p-3 text-left font-medium text-gray-500">Nome</th>
+              <th class="p-3 text-left font-medium text-gray-500">Brand</th>
+              <th class="p-3 text-left font-medium text-gray-500">Dati</th>
+              <th class="p-3 text-left font-medium text-gray-500">Shopify</th>
+              <th class="p-3 text-left font-medium text-gray-500">Amazon</th>
+              <th class="p-3 text-left font-medium text-gray-500">Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="prod-tbody">
+            <tr><td colspan="9" class="p-12 text-center">
+              <div class="inline-block w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full spin"></div>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <!-- Mobile cards -->
+    <div id="prod-cards" class="sm:hidden space-y-3">
+      <div class="p-12 text-center"><div class="inline-block w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full spin"></div></div>
+    </div>
+  </section>
+</main>
+
+<!-- Mobile bottom nav -->
+<nav class="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-20" style="padding-bottom:env(safe-area-inset-bottom,0)">
+  <button onclick="showPage('dashboard')" id="mob-nav-dashboard"
+    class="flex-1 py-3 flex flex-col items-center gap-0.5 text-xs font-medium text-gray-400">
+    <span class="text-lg">📊</span>Dashboard
+  </button>
+  <div class="flex-none w-16 flex items-center justify-center">
+    <button onclick="openAddModal()" class="w-12 h-12 rounded-full bg-brand-500 flex items-center justify-center shadow-lg text-white text-2xl -mt-5">+</button>
+  </div>
+  <button onclick="showPage('products')" id="mob-nav-products"
+    class="flex-1 py-3 flex flex-col items-center gap-0.5 text-xs font-medium text-gray-400">
+    <span class="text-lg">📦</span>Prodotti
+  </button>
+</nav>
+
+<!-- ══════════════════ ADD PRODUCT MODAL ══════════════════ -->
+<div id="add-modal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
+  <div class="modal-sheet bg-white rounded-2xl shadow-2xl w-full sm:max-w-xl p-6 relative">
+    <button onclick="closeAddModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+    <h3 class="text-xl font-heading font-semibold mb-5">Aggiungi prodotto</h3>
+
+    <!-- EAN input -->
+    <div id="add-step-ean">
+      <label class="text-xs font-medium text-gray-500 mb-1.5 block">Codice EAN / Barcode</label>
+      <div class="flex gap-2">
+        <input id="add-ean-input" type="text" inputmode="numeric" placeholder="Es. 8052278333313"
+          class="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono"
+          onkeydown="if(event.key==='Enter')searchEan()">
+        <button onclick="startScanner()" title="Scansiona barcode"
+          class="px-4 py-3 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 text-xl">
+          📷
+        </button>
+        <button onclick="searchEan()" id="add-search-btn"
+          class="px-5 py-3 rounded-xl text-white bg-brand-500 hover:bg-brand-600 font-medium text-sm flex items-center gap-2 min-w-[80px] justify-center">
+          <span id="add-search-spin" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></span>
+          <span id="add-search-label">Cerca</span>
+        </button>
+      </div>
+      <p id="add-ean-msg" class="text-xs mt-2 hidden"></p>
+    </div>
+
+    <!-- Product form (revealed after EAN search) -->
+    <div id="add-step-form" class="hidden mt-5 space-y-3">
+      <div id="add-found-banner" class="hidden p-3 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-700"></div>
+      <div id="add-notfound-banner" class="hidden p-3 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-700">
+        ⚠ Prodotto non trovato online. Compila i campi o usa la foto per l'analisi AI.
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Nome *</label>
+          <input id="add-name" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Brand</label>
+          <input id="add-brand" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Categoria</label>
+          <select id="add-category" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white">
+            <option value="">— Seleziona —</option>
+            <option>Bicchieri</option><option>Posate</option><option>Piatti</option>
+            <option>Pentole</option><option>Accessori cucina</option>
+            <option>Decorazione</option><option>Tessili</option><option>Altro</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Peso (g)</label>
+          <input id="add-weight" type="number" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-500 mb-1 block">Descrizione</label>
+        <textarea id="add-desc" rows="3" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"></textarea>
+      </div>
+
+      <!-- Photo -->
+      <div class="border-t border-gray-100 pt-3">
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-xs font-medium text-gray-500">Foto prodotto</label>
+          <span id="add-ai-status" class="text-xs text-green-600 font-medium"></span>
+        </div>
+        <div id="add-photo-preview" class="hidden mb-3 relative">
+          <img id="add-photo-img" src="" alt="" class="w-full max-h-48 object-contain rounded-xl border border-gray-200 bg-gray-50">
+          <button onclick="clearAddPhoto()" class="absolute top-2 right-2 w-7 h-7 bg-gray-900/70 text-white rounded-full text-sm flex items-center justify-center">✕</button>
+        </div>
+        <div id="add-photo-drop" class="drop-zone rounded-xl p-6 text-center"
+          onclick="document.getElementById('add-photo-file').click()"
+          ondragover="event.preventDefault();this.classList.add('drag-over')"
+          ondragleave="this.classList.remove('drag-over')"
+          ondrop="handleAddDrop(event)">
+          <p class="text-3xl mb-2">📷</p>
+          <p class="text-sm text-gray-600 font-medium">Tocca per scattare / caricare foto</p>
+          <p class="text-xs text-gray-400 mt-1">JPG, PNG, HEIC — oppure trascina qui</p>
+        </div>
+        <input id="add-photo-file" type="file" accept="image/*" capture="environment" class="hidden" onchange="handleAddPhotoFile(event)">
+        <div id="add-photo-actions" class="hidden flex gap-2 mt-3">
+          <button onclick="analyzeAddPhoto()" id="add-analyze-btn"
+            class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium border border-brand-200 text-brand-600 bg-brand-50 hover:bg-brand-100">
+            <span id="add-analyze-spin" class="hidden w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full spin"></span>
+            ✨ Analizza AI
+          </button>
+          <button onclick="removeAddBg()" id="add-bg-btn"
+            class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
+            <span id="add-bg-spin" class="hidden w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full spin"></span>
+            🪄 Rimuovi sfondo
+          </button>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
+        <button onclick="closeAddModal()" class="px-4 py-2.5 text-sm rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200">Annulla</button>
+        <button onclick="saveNewProduct()" id="add-save-btn"
+          class="px-5 py-2.5 text-sm rounded-xl text-white font-medium bg-brand-500 hover:bg-brand-600 flex items-center gap-2">
+          <span id="add-save-spin" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></span>
+          Salva prodotto
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ EDIT MODAL ══════════════════ -->
+<div id="edit-modal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
+  <div class="modal-sheet bg-white rounded-2xl shadow-2xl w-full sm:max-w-xl p-6 relative">
+    <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+    <h3 class="text-xl font-heading font-semibold mb-4">Modifica prodotto</h3>
+    <input type="hidden" id="edit-id">
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs font-medium text-gray-500 mb-1 block">EAN</label>
+        <input id="edit-ean" readonly class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 text-gray-400 font-mono">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Nome</label>
+          <input id="edit-name" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Brand</label>
+          <input id="edit-brand" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Categoria</label>
+          <select id="edit-category" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white">
+            <option value="">— Seleziona —</option>
+            <option>Bicchieri</option><option>Posate</option><option>Piatti</option>
+            <option>Pentole</option><option>Accessori cucina</option>
+            <option>Decorazione</option><option>Tessili</option><option>Altro</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Peso (g)</label>
+          <input id="edit-weight" type="number" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-500 mb-1 block">Descrizione</label>
+        <textarea id="edit-desc" rows="3" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"></textarea>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-500 mb-1 block">Note</label>
+        <input id="edit-notes" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+
+      <!-- Photo section -->
+      <div class="border-t border-gray-100 pt-3">
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-xs font-medium text-gray-500">Foto prodotto</label>
+          <span id="edit-ai-status" class="text-xs text-green-600 font-medium"></span>
+        </div>
+        <div id="edit-current-img" class="hidden mb-3">
+          <img id="edit-current-img-el" src="" alt="" class="w-full max-h-40 object-contain rounded-xl border border-gray-200 bg-gray-50">
+          <p class="text-xs text-gray-400 mt-1 text-center">Foto attuale</p>
+        </div>
+        <div id="edit-photo-preview" class="hidden mb-3 relative">
+          <img id="edit-photo-img" src="" alt="" class="w-full max-h-40 object-contain rounded-xl border border-brand-200 bg-brand-50">
+          <p class="text-xs text-brand-600 mt-1 text-center font-medium">✓ Nuova foto</p>
+          <button onclick="clearEditPhoto()" class="absolute top-2 right-2 w-7 h-7 bg-gray-900/70 text-white rounded-full text-sm flex items-center justify-center">✕</button>
+        </div>
+        <button onclick="document.getElementById('edit-photo-file').click()"
+          class="w-full py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2">
+          📷 Carica / Scatta nuova foto
+        </button>
+        <input id="edit-photo-file" type="file" accept="image/*" capture="environment" class="hidden" onchange="handleEditPhotoFile(event)">
+        <div id="edit-photo-actions" class="hidden flex gap-2 mt-3">
+          <button onclick="analyzeEditPhoto()" id="edit-analyze-btn"
+            class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium border border-brand-200 text-brand-600 bg-brand-50 hover:bg-brand-100">
+            <span id="edit-analyze-spin" class="hidden w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full spin"></span>
+            ✨ Analizza AI
+          </button>
+          <button onclick="removeEditBg()" id="edit-bg-btn"
+            class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
+            <span id="edit-bg-spin" class="hidden w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full spin"></span>
+            🪄 Rimuovi sfondo
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
+      <button onclick="closeModal()" class="px-4 py-2.5 text-sm rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200">Annulla</button>
+      <button onclick="saveEdit()" id="edit-save-btn"
+        class="px-5 py-2.5 text-sm rounded-xl text-white font-medium bg-brand-500 hover:bg-brand-600 flex items-center gap-2">
+        <span id="edit-save-spin" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></span>
+        Salva
+      </button>
+    </div>
+  </div>
+</div>
+
+<footer class="hidden sm:block border-t border-gray-200 py-4 text-center text-xs text-gray-400 mt-8">
+  RigHouse Product Manager — <a href="https://shop.righouse.it" target="_blank" class="hover:underline">shop.righouse.it</a>
+</footer>
+
+<script>
+// ─── CONFIG ────────────────────────────────────────────────────────────────
+const SB_URL = 'https://rncsrhicgigjgxnzjmqv.supabase.co'
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJuY3NyaGljZ2lnamd4bnpqbXF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3MjEwNTQsImV4cCI6MjA5MTI5NzA1NH0.pVv0f6OGnEFxV6B_ePjJMRt_-uT51gcKmVWOi3mCr5g'
+let OPENAI_KEY = localStorage.getItem('rh_openai_key') || ''
+
+// ─── SUPABASE ──────────────────────────────────────────────────────────────
+const SBH = {
+  'apikey': SB_KEY, 'Authorization': 'Bearer '+SB_KEY,
+  'Content-Type': 'application/json', 'Prefer': 'return=representation'
+}
+async function sbSelect(table, p={}) {
+  const url = new URL(`${SB_URL}/rest/v1/${table}`)
+  if (p.select) url.searchParams.set('select', p.select)
+  if (p.eq)     Object.entries(p.eq).forEach(([k,v]) => url.searchParams.set(k, `eq.${v}`))
+  if (p.or)     url.searchParams.set('or', p.or)
+  if (p.order)  url.searchParams.set('order', p.order)
+  if (p.limit)  url.searchParams.set('limit', p.limit)
+  const r = await fetch(url, {headers:SBH}); if(!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+async function sbInsert(table, data) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}`, {method:'POST',headers:SBH,body:JSON.stringify(data)})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+async function sbUpdate(table, data, eq) {
+  const url = new URL(`${SB_URL}/rest/v1/${table}`)
+  Object.entries(eq).forEach(([k,v]) => url.searchParams.set(k, `eq.${v}`))
+  const r = await fetch(url, {method:'PATCH',headers:SBH,body:JSON.stringify(data)})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+async function sbUpsert(table, data) {
+  const url = new URL(`${SB_URL}/rest/v1/${table}`)
+  const h = {...SBH, 'Prefer':'return=representation,resolution=merge-duplicates'}
+  const r = await fetch(url, {method:'POST', headers:h, body:JSON.stringify(data)})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+async function sbUpdateIn(table, data, col, vals) {
+  const url = new URL(`${SB_URL}/rest/v1/${table}`)
+  url.searchParams.set(col, `in.(${vals.map(v=>`"${v}"`).join(',')})`)
+  const r = await fetch(url, {method:'PATCH',headers:SBH,body:JSON.stringify(data)})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+async function sbUploadImage(ean, blob) {
+  const ext = blob.type==='image/png' ? 'png' : 'jpg'
+  const fname = `${ean}_${Date.now()}.${ext}`
+  const r = await fetch(`${SB_URL}/storage/v1/object/product-images/${fname}`, {
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':blob.type,'x-upsert':'true'},
+    body:blob
+  })
+  if(!r.ok) throw new Error('Storage: '+await r.text())
+  return `${SB_URL}/storage/v1/object/public/product-images/${fname}`
+}
+
+// ─── EAN LOOKUP ────────────────────────────────────────────────────────────
+async function lookupEanOnline(ean) {
+  // UPCitemdb (free, no key, CORS ok)
+  try {
+    const r = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${ean}`)
+    if (r.ok) {
+      const d = await r.json()
+      if (d.items && d.items.length) {
+        const it = d.items[0]
+        return { name:it.title||null, brand:it.brand||null, category:it.category||null,
+                 description:it.description||null, images:it.images||[], data_source:'api' }
+      }
+    }
+  } catch(e){}
+  // Open Food Facts (for food / household)
+  try {
+    const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${ean}.json`)
+    if (r.ok) {
+      const d = await r.json()
+      if (d.status===1 && d.product) {
+        const p = d.product
+        const img = p.image_url || p.image_front_url || null
+        return { name:p.product_name_it||p.product_name||null,
+                 brand:p.brands?p.brands.split(',')[0].trim():null,
+                 category:null, description:null,
+                 images:img?[img]:[], data_source:'api' }
+      }
+    }
+  } catch(e){}
+  return null
+}
+
+// ─── OPENAI VISION ─────────────────────────────────────────────────────────
+async function resizeForAI(dataUrl) {
+  return new Promise(res => {
+    const img = new Image(); img.onload = () => {
+      const MAX=1024; let w=img.width, h=img.height
+      if (w>MAX||h>MAX) { if(w>h){h=Math.round(h*MAX/w);w=MAX}else{w=Math.round(w*MAX/h);h=MAX} }
+      const c=document.createElement('canvas'); c.width=w; c.height=h
+      c.getContext('2d').drawImage(img,0,0,w,h)
+      res(c.toDataURL('image/jpeg',0.85))
+    }; img.src=dataUrl
+  })
+}
+
+async function analyzeWithAI(dataUrl) {
+  if (!OPENAI_KEY) throw new Error('Inserisci la chiave OpenAI nella variabile OPENAI_KEY in dashboard.html')
+  const resized = await resizeForAI(dataUrl)
+  const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    method:'POST',
+    headers:{'Authorization':'Bearer '+OPENAI_KEY,'Content-Type':'application/json'},
+    body:JSON.stringify({
+      model:'gpt-4o',
+      messages:[{role:'user',content:[
+        {type:'text',text:`Sei un esperto di e-commerce italiano. Analizza questa foto di prodotto per la casa e rispondi SOLO con JSON valido (nessun markdown):\n{"name":"nome commerciale preciso in italiano","brand":"marca se visibile altrimenti null","category":"una tra: Bicchieri, Posate, Piatti, Pentole, Accessori cucina, Decorazione, Tessili, Altro","description":"descrizione prodotto per e-commerce 2-3 frasi professionali in italiano","weight_g":numero intero stimato oppure null}`},
+        {type:'image_url',image_url:{url:resized,detail:'high'}}
+      ]}],
+      max_tokens:600
+    })
+  })
+  if (!r.ok) { const e=await r.json().catch(()=>({})); throw new Error(e.error?.message||'Errore OpenAI') }
+  const d = await r.json()
+  const content = d.choices[0].message.content.trim()
+  const match = content.match(/\{[\s\S]*\}/)
+  if (!match) throw new Error('Risposta AI non valida')
+  return JSON.parse(match[0])
+}
+
+// ─── IMAGE → BASE64 (stored directly in DB, no external storage needed) ────
+async function imageToDataUrl(blob, maxSize=800) {
+  return new Promise((res, rej) => {
+    const img = new Image()
+    img.onload = () => {
+      let w=img.width, h=img.height
+      if(w>maxSize||h>maxSize){if(w>h){h=Math.round(h*maxSize/w);w=maxSize}else{w=Math.round(w*maxSize/h);h=maxSize}}
+      const c=document.createElement('canvas'); c.width=w; c.height=h
+      c.getContext('2d').drawImage(img,0,0,w,h)
+      res(c.toDataURL('image/jpeg',0.82))
+    }
+    img.onerror = rej
+    img.src = URL.createObjectURL(blob)
+  })
+}
+
+// ─── BARCODE SCANNER ───────────────────────────────────────────────────────
+let scanStream = null
+let scanAnimFrame = null
+
+async function startScanner() {
+  document.getElementById('scan-modal').classList.remove('hidden')
+  document.getElementById('scan-hint').textContent = 'Avvio fotocamera...'
+  const video = document.getElementById('scan-video')
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:'environment', width:{ideal:1280}, height:{ideal:720} }
+    })
+    video.srcObject = scanStream
+    await video.play()
+    // Use native BarcodeDetector if available, otherwise load polyfill (works on all browsers)
+    let DetectorClass = window.BarcodeDetector
+    if (!DetectorClass) {
+      const mod = await import('https://esm.sh/barcode-detector@2.2.10')
+      DetectorClass = mod.default || mod.BarcodeDetector
+    }
+    const detector = new DetectorClass({
+      formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf']
+    })
+    document.getElementById('scan-hint').textContent = 'Inquadra il barcode del prodotto'
+    const scan = async () => {
+      if (!document.getElementById('scan-modal').classList.contains('hidden')) {
+        try {
+          const codes = await detector.detect(video)
+          if (codes.length) {
+            const val = codes[0].rawValue
+            stopScanner()
+            document.getElementById('add-ean-input').value = val
+            showToast('✓ Barcode: '+val, 'success')
+            searchEan()
+            return
+          }
+        } catch(e) {}
+        scanAnimFrame = requestAnimationFrame(scan)
+      }
+    }
+    scanAnimFrame = requestAnimationFrame(scan)
+  } catch(e) {
+    showToast('Fotocamera non accessibile: '+e.message, 'error')
+    stopScanner()
+  }
+}
+
+function stopScanner() {
+  if (scanAnimFrame) { cancelAnimationFrame(scanAnimFrame); scanAnimFrame = null }
+  if (scanStream) { scanStream.getTracks().forEach(t=>t.stop()); scanStream = null }
+  document.getElementById('scan-modal').classList.add('hidden')
+}
+
+// ─── BACKGROUND REMOVAL ────────────────────────────────────────────────────
+async function applyBgRemoval(blob) {
+  showToast('Rimozione sfondo... prima volta ~30s per download modello', 'info')
+  let removeBackground
+  try {
+    ;({ removeBackground } = await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5'))
+  } catch(e) {
+    ;({ removeBackground } = await import('https://esm.sh/@imgly/background-removal@1.4.5'))
+  }
+  return await removeBackground(blob)
+}
+
+// ─── STATE ─────────────────────────────────────────────────────────────────
+let allProducts   = []
+let selected      = new Set()
+let currentFilter = 'all'
+let searchTimeout = null
+let addPhotoBlob  = null
+let addPhotoUrl   = null
+let addCurrentEan = ''
+let editPhotoBlob = null
+let editPhotoUrl  = null
+
+const FILTERS = [
+  {key:'all',label:'Tutti'},
+  {key:'shopify_pending',label:'Shopify pending'},
+  {key:'amazon_pending',label:'Amazon pending'},
+  {key:'missing_data',label:'Dati mancanti'},
+  {key:'no_images',label:'Senza foto'},
+  {key:'errors',label:'Errori'},
+]
+
+// ─── INIT ──────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  testConnection()
+  renderFilterBtns()
+  showPage('dashboard')
+  loadConfig() // load & decrypt API keys from DB silently
+})
+
+async function testConnection() {
+  try {
+    await sbSelect('products', {select:'id',limit:'1'})
+    setConn(true, 'Connesso')
+  } catch(e) { setConn(false, 'Errore DB') }
+}
+function setConn(ok, msg) {
+  document.getElementById('conn-dot').className = `w-2 h-2 rounded-full ${ok?'bg-green-400':'bg-red-400'}`
+  document.getElementById('conn-label').textContent = msg
+}
+
+// ─── PAGES ─────────────────────────────────────────────────────────────────
+function showPage(page, filter) {
+  ['dashboard','products'].forEach(p => {
+    document.getElementById('page-'+p).classList.add('hidden')
+    const d=document.getElementById('nav-'+p), m=document.getElementById('mob-nav-'+p)
+    if(d) d.className='px-4 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100'
+    if(m) m.className='flex-1 py-3 flex flex-col items-center gap-0.5 text-xs font-medium text-gray-400'
+  })
+  document.getElementById('page-'+page).classList.remove('hidden')
+  const d=document.getElementById('nav-'+page), m=document.getElementById('mob-nav-'+page)
+  if(d) d.className='px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-brand-500 text-white'
+  if(m) m.className='flex-1 py-3 flex flex-col items-center gap-0.5 text-xs font-medium text-brand-600'
+  if (page==='dashboard') loadDashboard()
+  if (page==='products') { if(filter){currentFilter=filter;renderFilterBtns()} loadProducts() }
+}
+
+// ─── DASHBOARD ─────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  document.getElementById('dash-loading').classList.remove('hidden')
+  document.getElementById('dash-content').classList.add('hidden')
+  document.getElementById('dash-empty').classList.add('hidden')
+  try {
+    const data = await sbSelect('products', {select:'data_source,shopify_status,amazon_status,images'})
+    document.getElementById('dash-loading').classList.add('hidden')
+    if (!data.length) { document.getElementById('dash-empty').classList.remove('hidden'); return }
+    const s = {
+      total:data.length, api:data.filter(p=>p.data_source==='api').length,
+      pending:data.filter(p=>p.data_source==='pending').length,
+      images:data.filter(p=>p.images&&p.images.length).length,
+      noImg:data.filter(p=>!p.images||!p.images.length).length,
+      shUp:data.filter(p=>p.shopify_status==='uploaded').length,
+      shPend:data.filter(p=>p.shopify_status==='pending').length,
+      shErr:data.filter(p=>p.shopify_status==='error').length,
+      azUp:data.filter(p=>p.amazon_status==='uploaded').length,
+      azPend:data.filter(p=>p.amazon_status==='pending').length,
+      azErr:data.filter(p=>p.amazon_status==='error').length,
+    }
+    const pct=(n,t)=>t>0?Math.round(n/t*100):0
+    setText('s-total',s.total); setText('s-api',s.api); setText('s-api-pct',pct(s.api,s.total)+'%')
+    setText('s-pending',s.pending); setText('s-images',s.images); setText('s-noimages',s.noImg+' senza foto')
+    setText('sh-up',s.shUp); setText('sh-pend',s.shPend); setText('sh-err',s.shErr)
+    setText('az-up',s.azUp); setText('az-pend',s.azPend); setText('az-err',s.azErr)
+    setText('qa-sh',s.shPend); setText('qa-az',s.azPend); setText('qa-miss',s.pending)
+    const shP=pct(s.shUp,s.total), azP=pct(s.azUp,s.total)
+    document.getElementById('sh-bar').style.width=shP+'%'; setText('sh-pct',shP+'%')
+    document.getElementById('az-bar').style.width=azP+'%'; setText('az-pct',azP+'%')
+    document.getElementById('dash-content').classList.remove('hidden')
+  } catch(e) {
+    document.getElementById('dash-loading').classList.add('hidden')
+    showToast('Errore: '+e.message,'error')
+  }
+}
+function setText(id,val){const el=document.getElementById(id);if(el)el.textContent=val}
+
+// ─── PRODUCTS ──────────────────────────────────────────────────────────────
+function renderFilterBtns() {
+  const c=document.getElementById('filter-btns'); if(!c) return
+  c.innerHTML=FILTERS.map(f=>`
+    <button onclick="setFilter('${f.key}')"
+      class="flex-none px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${currentFilter===f.key?'bg-brand-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
+      ${f.label}
+    </button>`).join('')
+}
+function setFilter(k){currentFilter=k;renderFilterBtns();clearSelection();loadProducts()}
+function debounceSearch(){clearTimeout(searchTimeout);searchTimeout=setTimeout(loadProducts,300)}
+
+async function loadProducts() {
+  const spin='<div class="p-12 text-center"><div class="inline-block w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full spin"></div></div>'
+  document.getElementById('prod-tbody').innerHTML=`<tr><td colspan="9">${spin}</td></tr>`
+  document.getElementById('prod-cards').innerHTML=spin
+  document.getElementById('prod-error').classList.add('hidden')
+  try {
+    const params={
+      select:'id,ean,name,brand,category,images,data_source,shopify_status,amazon_status,shopify_error,amazon_error,description,weight_g,notes',
+      order:'created_at.desc', limit:'500'
+    }
+    if(currentFilter==='shopify_pending') params.eq={shopify_status:'pending'}
+    if(currentFilter==='amazon_pending')  params.eq={amazon_status:'pending'}
+    if(currentFilter==='missing_data')    params.eq={data_source:'pending'}
+    if(currentFilter==='errors')          params.or='(shopify_status.eq.error,amazon_status.eq.error)'
+    let products = await sbSelect('products', params)
+    if(currentFilter==='no_images') products=products.filter(p=>!p.images||!p.images.length)
+    const q=document.getElementById('search-input').value.trim().toLowerCase()
+    if(q) products=products.filter(p=>(p.ean&&p.ean.includes(q))||(p.name&&p.name.toLowerCase().includes(q))||(p.brand&&p.brand.toLowerCase().includes(q)))
+    allProducts=products; setText('prod-count',products.length+' prodotti')
+    renderTable(); renderCards()
+  } catch(e) {
+    const el=document.getElementById('prod-error'); el.textContent='Errore: '+e.message; el.classList.remove('hidden')
+    document.getElementById('prod-tbody').innerHTML=''; document.getElementById('prod-cards').innerHTML=''
+  }
+}
+
+function renderTable() {
+  const tb=document.getElementById('prod-tbody')
+  if(!allProducts.length){tb.innerHTML='<tr><td colspan="9" class="p-16 text-center text-gray-400"><p class="text-4xl mb-3">🔍</p><p>Nessun prodotto trovato.</p></td></tr>';return}
+  const src=s=>({'api':'<span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">api</span>','manual':'<span class="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">manual</span>'}[s]||'<span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">pending</span>')
+  const st=s=>({'uploaded':'<span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">✓</span>','error':'<span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">✗</span>'}[s]||'<span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">⏳</span>')
+  tb.innerHTML=allProducts.map(p=>{
+    const img=p.images&&p.images[0]?`<img src="${p.images[0]}" class="w-12 h-12 object-cover rounded-xl border border-gray-100" loading="lazy">`:'<div class="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-lg">📷</div>'
+    return`<tr id="row-${p.id}" class="${selected.has(p.id)?'bg-brand-50':''}">
+      <td class="p-3"><input type="checkbox" ${selected.has(p.id)?'checked':''} onchange="toggleSelect('${p.id}')" class="rounded cursor-pointer"></td>
+      <td class="p-3">${img}</td>
+      <td class="p-3 font-mono text-xs text-gray-400">${p.ean}</td>
+      <td class="p-3 font-medium text-gray-800 max-w-xs"><span class="line-clamp-2">${p.name||'<span class="text-gray-300 italic font-normal">—</span>'}</span></td>
+      <td class="p-3 text-gray-500 text-xs">${p.brand||'—'}</td>
+      <td class="p-3">${src(p.data_source)}</td>
+      <td class="p-3">${st(p.shopify_status)}</td>
+      <td class="p-3">${st(p.amazon_status)}</td>
+      <td class="p-3"><div class="flex flex-col gap-1">
+        ${p.shopify_status!=='uploaded'?`<button onclick="uploadOne('${p.id}','shopify')" class="text-xs px-2 py-1 rounded-lg text-white bg-brand-500">↑ Shopify</button>`:''}
+        ${p.amazon_status!=='uploaded'?`<button onclick="uploadOne('${p.id}','amazon')" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#FF9900">↑ Amazon</button>`:''}
+        <button onclick="openEdit('${p.id}')" class="text-xs px-2 py-1 rounded-lg bg-gray-100 text-gray-600">✎ Modifica</button>
+      </div></td>
+    </tr>`
+  }).join('')
+}
+
+function renderCards() {
+  const c=document.getElementById('prod-cards')
+  if(!allProducts.length){c.innerHTML='<div class="text-center py-16 text-gray-400"><p class="text-4xl mb-3">🔍</p><p>Nessun prodotto trovato.</p></div>';return}
+  const dot=s=>({'uploaded':'bg-green-500','error':'bg-red-500'}[s]||'bg-amber-400')
+  c.innerHTML=allProducts.map(p=>{
+    const img=p.images&&p.images[0]?`<img src="${p.images[0]}" class="w-16 h-16 object-cover rounded-xl border border-gray-100 flex-shrink-0" loading="lazy">`:'<div class="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">📷</div>'
+    return`<div class="bg-white rounded-2xl border border-gray-100 p-4 card flex gap-4 items-start">
+      ${img}
+      <div class="flex-1 min-w-0">
+        <p class="font-medium text-gray-800 text-sm leading-tight line-clamp-2">${p.name||'<span class="text-gray-400 italic">Nome mancante</span>'}</p>
+        <p class="text-xs text-gray-400 mt-0.5">${p.brand?p.brand+' · ':''}<span class="font-mono">${p.ean}</span></p>
+        <div class="flex items-center gap-3 mt-2">
+          <span class="inline-flex items-center gap-1 text-xs text-gray-500"><span class="w-2 h-2 rounded-full ${dot(p.shopify_status)}"></span>Shopify</span>
+          <span class="inline-flex items-center gap-1 text-xs text-gray-500"><span class="w-2 h-2 rounded-full ${dot(p.amazon_status)}"></span>Amazon</span>
+        </div>
+      </div>
+      <button onclick="openEdit('${p.id}')" class="flex-shrink-0 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium">✎</button>
+    </div>`
+  }).join('')
+}
+
+// ─── SELECTION ─────────────────────────────────────────────────────────────
+function toggleSelect(id){selected.has(id)?selected.delete(id):selected.add(id);const r=document.getElementById('row-'+id);if(r)r.className=selected.has(id)?'bg-brand-50':'';updateBulkBar()}
+function toggleSelectAll(){const a=document.getElementById('select-all').checked;allProducts.forEach(p=>a?selected.add(p.id):selected.delete(p.id));renderTable();updateBulkBar()}
+function clearSelection(){selected.clear();updateBulkBar()}
+function updateBulkBar(){const b=document.getElementById('bulk-bar');if(selected.size>0){setText('bulk-count',selected.size+' selezionati');b.classList.remove('hidden')}else b.classList.add('hidden')}
+
+// ─── UPLOAD ────────────────────────────────────────────────────────────────
+async function uploadToShopify(p) {
+  const shop  = appConfig.shopify_domain
+  const token = appConfig.shopify_token
+  if (!shop || !token) throw new Error('Configura Shopify nelle impostazioni ⚙️')
+  const product = {
+    title:        p.name || p.ean,
+    vendor:       p.brand  || '',
+    product_type: p.category || '',
+    body_html:    p.description || '',
+    variants: [{ barcode: p.ean, ...(p.weight_g ? {weight: +(p.weight_g/1000).toFixed(3), weight_unit:'kg'} : {}) }]
+  }
+  if (p.images && p.images.length) {
+    product.images = p.images.filter(Boolean).map(img => ({
+      attachment: img.replace(/^data:image\/\w+;base64,/, '')
+    }))
+  }
+  const resp = await fetch('/.netlify/functions/shopify-proxy', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({shop, token, product})
+  })
+  const data = await resp.json()
+  if (!resp.ok) throw new Error(data.errors ? JSON.stringify(data.errors) : `Shopify ${resp.status}`)
+  return data.product?.id?.toString()
+}
+
+async function uploadOne(id, platform) {
+  showToast('Caricamento...','info')
+  const p = allProducts.find(x=>x.id===id); if(!p) return
+  const now = new Date().toISOString()
+  try {
+    if (platform==='shopify') {
+      const shopifyId = await uploadToShopify(p)
+      await sbUpdate('products', {shopify_status:'uploaded', shopify_uploaded_at:now, shopify_product_id:shopifyId, shopify_error:null}, {id})
+      p.shopify_status='uploaded'; p.shopify_product_id=shopifyId
+      renderTable(); renderCards()
+      showToast('✓ Caricato su Shopify!','success')
+    } else {
+      showToast('Amazon non ancora implementato','info')
+    }
+  } catch(e) {
+    showToast('Errore: '+e.message,'error')
+    if (platform==='shopify') {
+      await sbUpdate('products', {shopify_status:'error', shopify_error:e.message.substring(0,200)}, {id}).catch(()=>{})
+      p.shopify_status='error'; renderTable(); renderCards()
+    }
+  }
+}
+
+async function bulkUpload(platform) {
+  const ids=[...selected]; if(!ids.length) return
+  if (platform==='amazon') { showToast('Amazon non ancora implementato','info'); return }
+  let ok=0, err=0
+  showToast(`Caricamento ${ids.length} prodotti su Shopify...`,'info')
+  for (const id of ids) {
+    const p = allProducts.find(x=>x.id===id); if(!p) continue
+    const now = new Date().toISOString()
+    try {
+      const shopifyId = await uploadToShopify(p)
+      await sbUpdate('products', {shopify_status:'uploaded', shopify_uploaded_at:now, shopify_product_id:shopifyId, shopify_error:null}, {id})
+      p.shopify_status='uploaded'; p.shopify_product_id=shopifyId; ok++
+    } catch(e) {
+      await sbUpdate('products', {shopify_status:'error', shopify_error:e.message.substring(0,200)}, {id}).catch(()=>{})
+      p.shopify_status='error'; err++
+    }
+  }
+  clearSelection(); renderTable(); renderCards()
+  showToast(`✓ Shopify: ${ok} caricati${err?', '+err+' errori':''}!`, err?'error':'success')
+}
+
+// ─── ADD PRODUCT MODAL ─────────────────────────────────────────────────────
+function openAddModal(){
+  addPhotoBlob=null;addPhotoUrl=null;addCurrentEan=''
+  ;['add-name','add-brand','add-desc','add-weight'].forEach(id=>document.getElementById(id).value='')
+  document.getElementById('add-category').value=''
+  document.getElementById('add-ean-input').value=''
+  document.getElementById('add-ean-msg').classList.add('hidden')
+  document.getElementById('add-step-form').classList.add('hidden')
+  document.getElementById('add-photo-preview').classList.add('hidden')
+  document.getElementById('add-photo-drop').classList.remove('hidden')
+  document.getElementById('add-photo-actions').classList.add('hidden')
+  document.getElementById('add-found-banner').classList.add('hidden')
+  document.getElementById('add-notfound-banner').classList.add('hidden')
+  document.getElementById('add-photo-file').value=''
+  document.getElementById('add-ai-status').textContent=''
+  document.getElementById('add-modal').classList.remove('hidden')
+  setTimeout(()=>document.getElementById('add-ean-input').focus(),200)
+}
+function closeAddModal(){document.getElementById('add-modal').classList.add('hidden')}
+document.getElementById('add-modal').addEventListener('click',e=>{if(e.target===document.getElementById('add-modal'))closeAddModal()})
+
+async function searchEan(){
+  const ean=document.getElementById('add-ean-input').value.trim().replace(/\s/g,'')
+  if(!ean||ean.length<8){showEanMsg('Inserisci un EAN valido (8–14 cifre)','error');return}
+  setBtn('add-search',true)
+  try{
+    // Already in DB?
+    const existing=await sbSelect('products',{select:'id,ean,name,brand,category,images,data_source,shopify_status,amazon_status,description,weight_g,notes',eq:{ean}})
+    if(existing.length){
+      if(!allProducts.find(x=>x.id===existing[0].id)) allProducts.unshift(existing[0])
+      closeAddModal(); showPage('products'); openEdit(existing[0].id)
+      showToast('EAN già in database — aperto in modifica','info'); return
+    }
+    addCurrentEan=ean
+    const found=await lookupEanOnline(ean)
+    document.getElementById('add-step-form').classList.remove('hidden')
+    if(found){
+      document.getElementById('add-found-banner').textContent='✓ Trovato: '+(found.name||'dati parziali')
+      document.getElementById('add-found-banner').classList.remove('hidden')
+      document.getElementById('add-notfound-banner').classList.add('hidden')
+      if(found.name)        document.getElementById('add-name').value=found.name
+      if(found.brand)       document.getElementById('add-brand').value=found.brand
+      if(found.description) document.getElementById('add-desc').value=found.description
+    }else{
+      document.getElementById('add-found-banner').classList.add('hidden')
+      document.getElementById('add-notfound-banner').classList.remove('hidden')
+    }
+  }catch(e){showEanMsg('Errore: '+e.message,'error')}
+  finally{setBtn('add-search',false)}
+}
+
+function showEanMsg(msg,type){
+  const el=document.getElementById('add-ean-msg')
+  if(!msg){el.classList.add('hidden');return}
+  el.className='text-xs mt-2 '+(type==='error'?'text-red-600':'text-green-600')
+  el.textContent=msg; el.classList.remove('hidden')
+}
+
+// Photo - Add modal
+function handleAddDrop(e){e.preventDefault();document.getElementById('add-photo-drop').classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)processAddPhoto(f)}
+function handleAddPhotoFile(e){const f=e.target.files[0];if(f)processAddPhoto(f)}
+function processAddPhoto(file){
+  if(!file.type.startsWith('image/')){showToast('Seleziona un file immagine','error');return}
+  addPhotoBlob=file
+  const r=new FileReader(); r.onload=e=>{
+    addPhotoUrl=e.target.result
+    document.getElementById('add-photo-img').src=addPhotoUrl
+    document.getElementById('add-photo-preview').classList.remove('hidden')
+    document.getElementById('add-photo-drop').classList.add('hidden')
+    document.getElementById('add-photo-actions').classList.remove('hidden')
+    if(document.getElementById('add-step-form').classList.contains('hidden')){
+      document.getElementById('add-step-form').classList.remove('hidden')
+      document.getElementById('add-notfound-banner').classList.remove('hidden')
+    }
+  }; r.readAsDataURL(file)
+}
+function clearAddPhoto(){
+  addPhotoBlob=null;addPhotoUrl=null
+  document.getElementById('add-photo-img').src=''
+  document.getElementById('add-photo-preview').classList.add('hidden')
+  document.getElementById('add-photo-drop').classList.remove('hidden')
+  document.getElementById('add-photo-actions').classList.add('hidden')
+  document.getElementById('add-photo-file').value=''
+}
+
+async function analyzeAddPhoto(){
+  if(!addPhotoUrl)return
+  if(!OPENAI_KEY){showToast('Inserisci la chiave OpenAI nelle impostazioni ⚙️','error');return}
+  setBtn('add-analyze',true)
+  try{
+    const result=await analyzeWithAI(addPhotoUrl)
+    if(result.name)        document.getElementById('add-name').value=result.name
+    if(result.brand)       document.getElementById('add-brand').value=result.brand
+    if(result.description) document.getElementById('add-desc').value=result.description
+    if(result.weight_g)    document.getElementById('add-weight').value=result.weight_g
+    if(result.category){
+      const sel=document.getElementById('add-category')
+      if([...sel.options].find(o=>o.value===result.category)) sel.value=result.category
+    }
+    document.getElementById('add-ai-status').textContent='✨ Compilato via AI'
+    showToast('✓ Analisi AI completata!','success')
+  }catch(e){showToast('Errore AI: '+e.message,'error')}
+  finally{setBtn('add-analyze',false)}
+}
+
+async function removeAddBg(){
+  if(!addPhotoBlob)return
+  setBtn('add-bg',true)
+  try{
+    const result=await applyBgRemoval(addPhotoBlob)
+    addPhotoBlob=result
+    addPhotoUrl=URL.createObjectURL(result)
+    document.getElementById('add-photo-img').src=addPhotoUrl
+    showToast('✓ Sfondo rimosso!','success')
+  }catch(e){showToast('Errore: '+e.message,'error')}
+  finally{setBtn('add-bg',false)}
+}
+
+async function saveNewProduct(){
+  const ean=addCurrentEan||document.getElementById('add-ean-input').value.trim()
+  if(!ean){showToast('Cerca prima un EAN','error');return}
+  setBtn('add-save',true)
+  try{
+    let images=[]
+    if(addPhotoBlob){
+      try{ images=[await imageToDataUrl(addPhotoBlob)] }
+      catch(e){ showToast('Errore compressione foto: '+e.message,'error') }
+    }
+    const name=document.getElementById('add-name').value.trim()
+    await sbInsert('products',{
+      ean, name:name||null,
+      brand:document.getElementById('add-brand').value.trim()||null,
+      category:document.getElementById('add-category').value||null,
+      weight_g:parseInt(document.getElementById('add-weight').value)||null,
+      description:document.getElementById('add-desc').value.trim()||null,
+      images, data_source:name?'manual':'pending'
+    })
+    closeAddModal(); showToast('✓ Prodotto aggiunto!','success')
+    loadProducts(); loadDashboard()
+  }catch(e){showToast('Errore: '+e.message,'error')}
+  finally{setBtn('add-save',false)}
+}
+
+// ─── EDIT MODAL ────────────────────────────────────────────────────────────
+function openEdit(id){
+  const p=allProducts.find(x=>x.id===id); if(!p) return
+  editPhotoBlob=null; editPhotoUrl=null
+  document.getElementById('edit-id').value=p.id
+  document.getElementById('edit-ean').value=p.ean
+  document.getElementById('edit-name').value=p.name||''
+  document.getElementById('edit-brand').value=p.brand||''
+  document.getElementById('edit-category').value=p.category||''
+  document.getElementById('edit-weight').value=p.weight_g||''
+  document.getElementById('edit-desc').value=p.description||''
+  document.getElementById('edit-notes').value=p.notes||''
+  document.getElementById('edit-photo-preview').classList.add('hidden')
+  document.getElementById('edit-photo-actions').classList.add('hidden')
+  document.getElementById('edit-photo-file').value=''
+  document.getElementById('edit-ai-status').textContent=''
+  const imgEl=document.getElementById('edit-current-img')
+  if(p.images&&p.images[0]){document.getElementById('edit-current-img-el').src=p.images[0];imgEl.classList.remove('hidden')}
+  else imgEl.classList.add('hidden')
+  document.getElementById('edit-modal').classList.remove('hidden')
+}
+function closeModal(){document.getElementById('edit-modal').classList.add('hidden')}
+document.getElementById('edit-modal').addEventListener('click',e=>{if(e.target===document.getElementById('edit-modal'))closeModal()})
+
+function handleEditPhotoFile(e){const f=e.target.files[0];if(f)processEditPhoto(f)}
+function processEditPhoto(file){
+  if(!file.type.startsWith('image/')){showToast('Seleziona un file immagine','error');return}
+  editPhotoBlob=file
+  const r=new FileReader(); r.onload=e=>{
+    editPhotoUrl=e.target.result
+    document.getElementById('edit-photo-img').src=editPhotoUrl
+    document.getElementById('edit-photo-preview').classList.remove('hidden')
+    document.getElementById('edit-photo-actions').classList.remove('hidden')
+    document.getElementById('edit-current-img').classList.add('hidden')
+  }; r.readAsDataURL(file)
+}
+function clearEditPhoto(){
+  editPhotoBlob=null; editPhotoUrl=null
+  document.getElementById('edit-photo-img').src=''
+  document.getElementById('edit-photo-preview').classList.add('hidden')
+  document.getElementById('edit-photo-actions').classList.add('hidden')
+  document.getElementById('edit-photo-file').value=''
+  const id=document.getElementById('edit-id').value
+  const p=allProducts.find(x=>x.id===id)
+  if(p&&p.images&&p.images[0]){document.getElementById('edit-current-img-el').src=p.images[0];document.getElementById('edit-current-img').classList.remove('hidden')}
+}
+
+async function analyzeEditPhoto(){
+  if(!editPhotoUrl)return
+  if(!OPENAI_KEY){showToast('Inserisci la chiave OpenAI nelle impostazioni ⚙️','error');return}
+  setBtn('edit-analyze',true)
+  try{
+    const result=await analyzeWithAI(editPhotoUrl)
+    if(result.name)        document.getElementById('edit-name').value=result.name
+    if(result.brand)       document.getElementById('edit-brand').value=result.brand
+    if(result.description) document.getElementById('edit-desc').value=result.description
+    if(result.weight_g)    document.getElementById('edit-weight').value=result.weight_g
+    if(result.category)    document.getElementById('edit-category').value=result.category
+    document.getElementById('edit-ai-status').textContent='✨ Compilato via AI'
+    showToast('✓ Analisi AI completata!','success')
+  }catch(e){showToast('Errore AI: '+e.message,'error')}
+  finally{setBtn('edit-analyze',false)}
+}
+
+async function removeEditBg(){
+  if(!editPhotoBlob)return
+  setBtn('edit-bg',true)
+  try{
+    const result=await applyBgRemoval(editPhotoBlob)
+    editPhotoBlob=result; editPhotoUrl=URL.createObjectURL(result)
+    document.getElementById('edit-photo-img').src=editPhotoUrl
+    showToast('✓ Sfondo rimosso!','success')
+  }catch(e){showToast('Errore: '+e.message,'error')}
+  finally{setBtn('edit-bg',false)}
+}
+
+async function saveEdit(){
+  const id=document.getElementById('edit-id').value
+  const cur=allProducts.find(x=>x.id===id)
+  setBtn('edit-save',true)
+  try{
+    let images=cur?.images||[]
+    if(editPhotoBlob){
+      try{ images=[await imageToDataUrl(editPhotoBlob),...images.slice(1)] }
+      catch(e){ showToast('Errore compressione foto: '+e.message,'error') }
+    }
+    const upd={
+      name:document.getElementById('edit-name').value.trim()||null,
+      brand:document.getElementById('edit-brand').value.trim()||null,
+      category:document.getElementById('edit-category').value||null,
+      weight_g:parseInt(document.getElementById('edit-weight').value)||null,
+      description:document.getElementById('edit-desc').value.trim()||null,
+      notes:document.getElementById('edit-notes').value.trim()||null,
+      images:images.filter(Boolean), data_source:'manual'
+    }
+    await sbUpdate('products',upd,{id})
+    const idx=allProducts.findIndex(x=>x.id===id); if(idx>=0) allProducts[idx]={...allProducts[idx],...upd}
+    renderTable(); renderCards(); closeModal()
+    showToast('✓ Prodotto aggiornato!','success')
+  }catch(e){showToast('Errore: '+e.message,'error')}
+  finally{setBtn('edit-save',false)}
+}
+
+// ─── CONFIG DEFINITIONS ────────────────────────────────────────────────────
+const CONFIG_DEFS = [
+  { section:'✨ OpenAI', color:'purple', fields:[
+    { key:'openai_key', label:'API Key', placeholder:'sk-proj-...', apply: v => OPENAI_KEY=v }
+  ]},
+  { section:'🛍️ Shopify', color:'green', fields:[
+    { key:'shopify_domain', label:'Shop Domain', placeholder:'negozio.myshopify.com' },
+    { key:'shopify_token',  label:'Admin API Token', placeholder:'shpat_...' }
+  ]},
+  { section:'📦 Amazon SP-API', color:'orange', fields:[
+    { key:'amz_seller_id',      label:'Seller ID',         placeholder:'AXXXXXXXXXX' },
+    { key:'amz_marketplace_id', label:'Marketplace ID',    placeholder:'APJ6JRA9NG5V4 (IT)' },
+    { key:'amz_refresh_token',  label:'SP-API Refresh Token', placeholder:'Atzr|...' },
+    { key:'amz_client_id',      label:'LWA Client ID',     placeholder:'amzn1.application-oa2-client...' },
+    { key:'amz_client_secret',  label:'LWA Client Secret', placeholder:'...' },
+    { key:'amz_aws_access_key', label:'AWS Access Key',    placeholder:'AKIA...' },
+    { key:'amz_aws_secret_key', label:'AWS Secret Key',    placeholder:'...' }
+  ]}
+]
+
+// ─── CRYPTO (AES-256-GCM, device key in localStorage) ──────────────────────
+async function getCryptoKey() {
+  let raw = localStorage.getItem('rh_dk')
+  if (!raw) {
+    const k = await crypto.subtle.generateKey({name:'AES-GCM',length:256}, true, ['encrypt','decrypt'])
+    const exp = await crypto.subtle.exportKey('raw', k)
+    raw = btoa(String.fromCharCode(...new Uint8Array(exp)))
+    localStorage.setItem('rh_dk', raw)
+    return k
+  }
+  return crypto.subtle.importKey('raw', Uint8Array.from(atob(raw),c=>c.charCodeAt(0)),
+    {name:'AES-GCM',length:256}, false, ['encrypt','decrypt'])
+}
+async function encryptStr(ck, str) {
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const enc = await crypto.subtle.encrypt({name:'AES-GCM',iv}, ck, new TextEncoder().encode(str))
+  const buf = new Uint8Array(12+enc.byteLength); buf.set(iv); buf.set(new Uint8Array(enc),12)
+  return btoa(String.fromCharCode(...buf))
+}
+async function decryptStr(ck, b64) {
+  const buf = Uint8Array.from(atob(b64),c=>c.charCodeAt(0))
+  const dec = await crypto.subtle.decrypt({name:'AES-GCM',iv:buf.slice(0,12)}, ck, buf.slice(12))
+  return new TextDecoder().decode(dec)
+}
+
+// ─── CONFIG LOAD/SAVE ──────────────────────────────────────────────────────
+let appConfig = {}
+async function loadConfig() {
+  try {
+    const rows = await sbSelect('config', {select:'key,value'})
+    if (!Array.isArray(rows)) return false
+    const ck = await getCryptoKey()
+    appConfig = {}
+    for (const row of rows) {
+      try { appConfig[row.key] = await decryptStr(ck, row.value) } catch(e) {}
+    }
+    // Apply known keys
+    CONFIG_DEFS.flatMap(s=>s.fields).forEach(f => {
+      if (appConfig[f.key] && f.apply) f.apply(appConfig[f.key])
+    })
+    // Fallback: OpenAI from old localStorage
+    if (!OPENAI_KEY) OPENAI_KEY = localStorage.getItem('rh_openai_key')||''
+    return true
+  } catch(e) { return false }
+}
+async function saveConfigKey(key, value) {
+  const ck = await getCryptoKey()
+  const encrypted = await encryptStr(ck, value)
+  await sbUpsert('config', {key, value:encrypted, updated_at:new Date().toISOString()})
+  appConfig[key] = value
+  const def = CONFIG_DEFS.flatMap(s=>s.fields).find(f=>f.key===key)
+  if (def?.apply) def.apply(value)
+}
+
+// ─── SETTINGS UI ───────────────────────────────────────────────────────────
+async function openSettings() {
+  document.getElementById('settings-modal').classList.remove('hidden')
+  ;['cfg-loading','cfg-missing','cfg-content','cfg-footer'].forEach(id =>
+    document.getElementById(id).classList.add('hidden'))
+  document.getElementById('cfg-loading').classList.remove('hidden')
+  const ok = await loadConfig()
+  document.getElementById('cfg-loading').classList.add('hidden')
+  if (!ok) { document.getElementById('cfg-missing').classList.remove('hidden'); return }
+  renderCfg()
+  document.getElementById('cfg-content').classList.remove('hidden')
+  document.getElementById('cfg-footer').classList.remove('hidden')
+}
+function closeSettings() { document.getElementById('settings-modal').classList.add('hidden') }
+document.getElementById('settings-modal').addEventListener('click',e=>{if(e.target===document.getElementById('settings-modal'))closeSettings()})
+
+function renderCfg() {
+  const sec = document.getElementById('cfg-sections')
+  sec.innerHTML = CONFIG_DEFS.map(s => `
+    <div>
+      <h4 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+        ${s.section}
+      </h4>
+      <div class="space-y-3">
+        ${s.fields.map(f => renderCfgField(f)).join('')}
+      </div>
+    </div>`).join('')
+}
+
+function renderCfgField(f, editing=false) {
+  const has = !!appConfig[f.key]
+  if (editing || !has) {
+    return `<div id="cfg-${f.key}" class="space-y-1">
+      <label class="text-xs text-gray-500">${f.label}</label>
+      <div class="flex gap-2">
+        <input type="password" id="inp-${f.key}" placeholder="${f.placeholder}"
+          class="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+          onkeydown="if(event.key==='Enter')saveField('${f.key}')">
+        <button onclick="saveField('${f.key}')"
+          class="px-4 py-2.5 text-xs font-medium rounded-xl text-white bg-brand-500 hover:bg-brand-600">Salva</button>
+        ${has?`<button onclick="renderCfg()" class="px-3 py-2.5 text-xs rounded-xl bg-gray-100 hover:bg-gray-200">✕</button>`:''}
+      </div>
+    </div>`
+  }
+  return `<div id="cfg-${f.key}" class="space-y-1">
+    <label class="text-xs text-gray-500">${f.label}</label>
+    <div class="flex gap-2 items-center">
+      <div class="flex-1 border border-gray-100 rounded-xl px-3 py-2.5 text-sm bg-gray-50 text-gray-400 font-mono tracking-widest">●●●●●●●●●●●●</div>
+      <button onclick="editCfgField('${f.key}')"
+        class="px-4 py-2.5 text-xs font-medium rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600">Modifica</button>
+    </div>
+  </div>`
+}
+
+function editCfgField(key) {
+  const f = CONFIG_DEFS.flatMap(s=>s.fields).find(x=>x.key===key)
+  const el = document.getElementById('cfg-'+key)
+  el.outerHTML = renderCfgField(f, true)
+  setTimeout(()=>document.getElementById('inp-'+key)?.focus(), 50)
+}
+
+async function saveField(key) {
+  const input = document.getElementById('inp-'+key)
+  const value = input?.value.trim()
+  if (!value) { showToast('Inserisci un valore', 'error'); return }
+  input.disabled = true
+  try {
+    await saveConfigKey(key, value)
+    renderCfg()
+    showToast('✓ Chiave salvata', 'success')
+  } catch(e) {
+    input.disabled = false
+    if (e.message.includes('42P01')||e.message.includes('config')) {
+      document.getElementById('cfg-content').classList.add('hidden')
+      document.getElementById('cfg-footer').classList.add('hidden')
+      document.getElementById('cfg-missing').classList.remove('hidden')
+    } else { showToast('Errore: '+e.message, 'error') }
+  }
+}
+
+// ─── HELPERS ───────────────────────────────────────────────────────────────
+function setBtn(prefix,loading){
+  const spin=document.getElementById(prefix+'-spin'), btn=document.getElementById(prefix+'-btn')
+  if(spin)spin.classList.toggle('hidden',!loading)
+  if(btn)btn.disabled=loading
+  // Also update label for search button
+  const lbl=document.getElementById(prefix+'-label')
+  if(lbl)lbl.textContent=loading?'...':'Cerca'
+}
+
+let toastTimer=null
+function showToast(msg,type='info'){
+  const t=document.getElementById('toast')
+  const bg={success:'bg-green-700',error:'bg-red-700',info:'bg-gray-900'}[type]
+  t.className=`fixed top-5 right-5 z-50 text-white text-sm px-4 py-3 rounded-xl shadow-xl max-w-xs transition-all duration-300 ${bg}`
+  t.textContent=msg; t.style.opacity='1'; t.style.transform='translateY(0)'
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>{t.style.opacity='0';t.style.transform='translateY(-8px)'},4000)
+}
+</script>
+</body>
+</html>
