@@ -124,7 +124,7 @@ create policy "anon_rw" on config
       <div class="p-6 space-y-6" id="cfg-sections"></div>
     </div>
     <div id="cfg-footer" class="hidden px-6 pb-6 pt-2">
-      <p class="text-xs text-gray-400 text-center">🔑 Chiave dispositivo salvata nel browser — su altri dispositivi le chiavi vanno reinserite.</p>
+      <p class="text-xs text-gray-400 text-center">🔒 Chiavi cifrate (AES-256) — leggibili su tutti i dispositivi con accesso all'app.</p>
     </div>
   </div>
 </div>
@@ -244,8 +244,19 @@ create policy "anon_rw" on config
         <h1 class="text-2xl sm:text-3xl font-heading font-bold text-gray-900">Prodotti</h1>
         <p id="prod-count" class="text-gray-500 mt-1 text-sm">Caricamento...</p>
       </div>
-      <div class="flex gap-2">
+      <div class="flex gap-2 flex-wrap justify-end">
         <button onclick="loadProducts()" class="px-3 py-2 text-sm font-medium rounded-xl bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 card">↻</button>
+        <div class="flex gap-1">
+          <button onclick="triggerCsvImport()" title="Importa da CSV"
+            class="px-4 py-2 text-sm font-medium rounded-l-xl text-white bg-gray-600 hover:bg-gray-700 flex items-center gap-1.5">
+            ↑ CSV
+          </button>
+          <button onclick="openCsvHelp()" title="Come formattare il CSV"
+            class="px-3 py-2 text-sm font-medium rounded-r-xl bg-gray-100 text-gray-600 hover:bg-gray-200 border-l border-gray-200">
+            ?
+          </button>
+        </div>
+        <input id="csv-file-input" type="file" accept=".csv,text/csv" class="hidden" onchange="handleCsvFile(event)">
         <button onclick="openAddModal()" class="px-4 py-2 text-sm font-medium rounded-xl text-white bg-brand-500 hover:bg-brand-600">+ Prodotto</button>
       </div>
     </div>
@@ -255,10 +266,11 @@ create policy "anon_rw" on config
         oninput="debounceSearch()">
       <div class="flex gap-2" id="filter-btns"></div>
     </div>
-    <div id="bulk-bar" class="hidden bg-brand-50 border border-brand-200 rounded-2xl p-3 mb-4 flex items-center gap-3 text-sm">
+    <div id="bulk-bar" class="hidden bg-brand-50 border border-brand-200 rounded-2xl p-3 mb-4 flex items-center gap-3 text-sm flex-wrap">
       <span id="bulk-count" class="font-medium text-brand-700"></span>
       <button onclick="bulkUpload('shopify')" class="px-3 py-1.5 rounded-lg font-medium text-white bg-brand-500 text-xs">↑ Shopify</button>
       <button onclick="bulkUpload('amazon')" class="px-3 py-1.5 rounded-lg font-medium text-white text-xs" style="background:#FF9900">↑ Amazon</button>
+      <button onclick="bulkDelete()" class="px-3 py-1.5 rounded-lg font-medium text-white bg-red-500 hover:bg-red-600 text-xs">🗑 Elimina</button>
       <button onclick="clearSelection()" class="ml-auto text-gray-400 hover:text-gray-600 text-xl">✕</button>
     </div>
     <div id="prod-error" class="hidden bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 mb-4 text-sm"></div>
@@ -273,6 +285,7 @@ create policy "anon_rw" on config
               <th class="p-3 text-left font-medium text-gray-500">EAN</th>
               <th class="p-3 text-left font-medium text-gray-500">Nome</th>
               <th class="p-3 text-left font-medium text-gray-500">Brand</th>
+              <th class="p-3 text-left font-medium text-gray-500">Prezzo</th>
               <th class="p-3 text-left font-medium text-gray-500">Dati</th>
               <th class="p-3 text-left font-medium text-gray-500">Shopify</th>
               <th class="p-3 text-left font-medium text-gray-500">Amazon</th>
@@ -341,6 +354,7 @@ create policy "anon_rw" on config
       <div id="add-notfound-banner" class="hidden p-3 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-700">
         ⚠ Prodotto non trovato online. Compila i campi o usa la foto per l'analisi AI.
       </div>
+      <div id="add-debug-banner" class="hidden p-3 bg-gray-100 border border-gray-200 rounded-xl text-xs text-gray-500 font-mono break-all"></div>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="text-xs font-medium text-gray-500 mb-1 block">Nome *</label>
@@ -364,6 +378,26 @@ create policy "anon_rw" on config
         <div>
           <label class="text-xs font-medium text-gray-500 mb-1 block">Peso (g)</label>
           <input id="add-weight" type="number" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+      </div>
+      <div class="border-t border-gray-100 pt-3">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Prezzo & Vendita</p>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-gray-500 mb-1 block">Prezzo (€) *</label>
+            <input id="add-price" type="number" step="0.01" min="0" placeholder="0.00"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <div>
+            <label class="text-xs font-medium text-gray-500 mb-1 block">Prezzo barrato (€)</label>
+            <input id="add-compare-price" type="number" step="0.01" min="0" placeholder="es. 29.90"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="text-xs font-medium text-gray-500 mb-1 block">SKU</label>
+          <input id="add-sku" type="text" placeholder="Codice articolo interno"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
         </div>
       </div>
       <div>
@@ -453,6 +487,26 @@ create policy "anon_rw" on config
           <input id="edit-weight" type="number" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
         </div>
       </div>
+      <div class="border-t border-gray-100 pt-3">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Prezzo & Vendita</p>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-gray-500 mb-1 block">Prezzo (€) *</label>
+            <input id="edit-price" type="number" step="0.01" min="0" placeholder="0.00"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <div>
+            <label class="text-xs font-medium text-gray-500 mb-1 block">Prezzo barrato (€)</label>
+            <input id="edit-compare-price" type="number" step="0.01" min="0" placeholder="es. 29.90"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="text-xs font-medium text-gray-500 mb-1 block">SKU</label>
+          <input id="edit-sku" type="text" placeholder="Codice articolo interno"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+      </div>
       <div>
         <label class="text-xs font-medium text-gray-500 mb-1 block">Descrizione</label>
         <textarea id="edit-desc" rows="3" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"></textarea>
@@ -507,6 +561,84 @@ create policy "anon_rw" on config
   </div>
 </div>
 
+<!-- ══════════════════ CSV HELP MODAL ══════════════════ -->
+<div id="csv-help-modal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
+  <div class="modal-sheet bg-white rounded-2xl shadow-2xl w-full sm:max-w-2xl relative overflow-y-auto" style="max-height:92vh">
+    <div class="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+      <h3 class="text-xl font-heading font-semibold">Formato CSV</h3>
+      <button onclick="closeCsvHelp()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+    </div>
+    <div class="p-6 space-y-5 text-sm">
+      <div>
+        <p class="font-medium text-gray-700 mb-1">Regole generali</p>
+        <ul class="text-gray-500 space-y-1 list-disc list-inside">
+          <li>Prima riga = intestazioni (nomi colonne)</li>
+          <li>Separatore: virgola <code class="bg-gray-100 px-1 rounded">,</code> o punto e virgola <code class="bg-gray-100 px-1 rounded">;</code> (rilevato automaticamente)</li>
+          <li>Codifica: UTF-8 (anche con BOM da Excel)</li>
+          <li>Se un campo contiene virgole, racchiudilo tra <code class="bg-gray-100 px-1 rounded">"virgolette"</code></li>
+          <li>Prodotti con EAN già presenti vengono aggiornati (upsert)</li>
+        </ul>
+      </div>
+      <div>
+        <p class="font-medium text-gray-700 mb-2">Colonne supportate</p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead><tr class="bg-gray-50">
+              <th class="border border-gray-200 px-3 py-2 text-left font-semibold">Colonna</th>
+              <th class="border border-gray-200 px-3 py-2 text-left font-semibold">Alias italiano</th>
+              <th class="border border-gray-200 px-3 py-2 text-left font-semibold">Obbl.</th>
+              <th class="border border-gray-200 px-3 py-2 text-left font-semibold">Descrizione</th>
+            </tr></thead>
+            <tbody>
+              <tr><td class="border border-gray-200 px-3 py-2 font-mono">ean</td><td class="border border-gray-200 px-3 py-2">—</td><td class="border border-gray-200 px-3 py-2 text-green-600 font-bold">✓</td><td class="border border-gray-200 px-3 py-2">Codice EAN/barcode (8–14 cifre)</td></tr>
+              <tr class="bg-gray-50"><td class="border border-gray-200 px-3 py-2 font-mono">name</td><td class="border border-gray-200 px-3 py-2 font-mono text-gray-400">nome</td><td class="border border-gray-200 px-3 py-2 text-green-600 font-bold">✓</td><td class="border border-gray-200 px-3 py-2">Nome prodotto</td></tr>
+              <tr><td class="border border-gray-200 px-3 py-2 font-mono">price</td><td class="border border-gray-200 px-3 py-2 font-mono text-gray-400">prezzo</td><td class="border border-gray-200 px-3 py-2 text-amber-600 font-bold">⚠</td><td class="border border-gray-200 px-3 py-2">Prezzo di vendita in €. Usare punto come decimale: <code class="bg-gray-100 px-1 rounded">12.50</code></td></tr>
+              <tr class="bg-gray-50"><td class="border border-gray-200 px-3 py-2 font-mono">brand</td><td class="border border-gray-200 px-3 py-2 font-mono text-gray-400">marca</td><td class="border border-gray-200 px-3 py-2 text-gray-400">—</td><td class="border border-gray-200 px-3 py-2">Marca/produttore</td></tr>
+              <tr><td class="border border-gray-200 px-3 py-2 font-mono">category</td><td class="border border-gray-200 px-3 py-2 font-mono text-gray-400">categoria</td><td class="border border-gray-200 px-3 py-2 text-gray-400">—</td><td class="border border-gray-200 px-3 py-2">Bicchieri, Posate, Piatti, Pentole, Accessori cucina, Decorazione, Tessili, Altro</td></tr>
+              <tr class="bg-gray-50"><td class="border border-gray-200 px-3 py-2 font-mono">compare_at_price</td><td class="border border-gray-200 px-3 py-2 font-mono text-gray-400">prezzo_barrato</td><td class="border border-gray-200 px-3 py-2 text-gray-400">—</td><td class="border border-gray-200 px-3 py-2">Prezzo originale (barrato) per Shopify</td></tr>
+              <tr><td class="border border-gray-200 px-3 py-2 font-mono">sku</td><td class="border border-gray-200 px-3 py-2">—</td><td class="border border-gray-200 px-3 py-2 text-gray-400">—</td><td class="border border-gray-200 px-3 py-2">Codice articolo interno</td></tr>
+              <tr class="bg-gray-50"><td class="border border-gray-200 px-3 py-2 font-mono">weight_g</td><td class="border border-gray-200 px-3 py-2 font-mono text-gray-400">peso_g / peso</td><td class="border border-gray-200 px-3 py-2 text-gray-400">—</td><td class="border border-gray-200 px-3 py-2">Peso in grammi (numero intero)</td></tr>
+              <tr><td class="border border-gray-200 px-3 py-2 font-mono">description</td><td class="border border-gray-200 px-3 py-2 font-mono text-gray-400">descrizione</td><td class="border border-gray-200 px-3 py-2 text-gray-400">—</td><td class="border border-gray-200 px-3 py-2">Descrizione prodotto</td></tr>
+              <tr class="bg-gray-50"><td class="border border-gray-200 px-3 py-2 font-mono">notes</td><td class="border border-gray-200 px-3 py-2 font-mono text-gray-400">note</td><td class="border border-gray-200 px-3 py-2 text-gray-400">—</td><td class="border border-gray-200 px-3 py-2">Note interne</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-xs text-amber-600 mt-2">⚠ <em>price</em> non è strettamente obbligatorio per salvare il prodotto, ma sarà richiesto per caricarlo su Shopify.</p>
+      </div>
+      <div>
+        <p class="font-medium text-gray-700 mb-2">Esempio</p>
+        <pre class="bg-gray-900 text-green-400 text-xs rounded-xl p-4 overflow-x-auto leading-relaxed">ean,name,brand,category,price,compare_at_price,sku,weight_g,description
+8052278333313,Bicchiere Crystal 30cl,Bormioli,Bicchieri,4.90,6.50,BIC-001,180,"Bicchiere in vetro, lavabile in lavastoviglie"
+8001110101234,Set posate 24pz,Pintinox,Posate,29.90,,POS-024,850,Set completo in acciaio inox 18/10</pre>
+      </div>
+      <button onclick="closeCsvHelp()" class="w-full py-2.5 rounded-xl bg-brand-500 text-white text-sm font-medium hover:bg-brand-600">Chiudi</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ CSV PREVIEW MODAL ══════════════════ -->
+<div id="csv-preview-modal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
+  <div class="modal-sheet bg-white rounded-2xl shadow-2xl w-full sm:max-w-lg relative">
+    <div class="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+      <h3 class="text-xl font-heading font-semibold">Anteprima importazione</h3>
+      <button onclick="closeCsvPreview()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+    </div>
+    <div class="p-6 space-y-4">
+      <div id="csv-preview-stats" class="text-sm text-gray-700"></div>
+      <div id="csv-preview-warnings" class="hidden text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1"></div>
+      <div id="csv-preview-rows" class="overflow-x-auto max-h-60 overflow-y-auto text-xs border border-gray-200 rounded-xl"></div>
+      <div class="flex gap-2 pt-2">
+        <button onclick="closeCsvPreview()" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium hover:bg-gray-200">Annulla</button>
+        <button onclick="confirmCsvImport()" id="csv-confirm-btn"
+          class="flex-1 py-2.5 rounded-xl bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 flex items-center justify-center gap-2">
+          <span id="csv-confirm-spin" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></span>
+          <span id="csv-confirm-label">Importa</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <footer class="hidden sm:block border-t border-gray-200 py-4 text-center text-xs text-gray-400 mt-8">
   RigHouse Product Manager — <a href="https://shop.righouse.it" target="_blank" class="hover:underline">shop.righouse.it</a>
 </footer>
@@ -554,6 +686,18 @@ async function sbUpdateIn(table, data, col, vals) {
   const r = await fetch(url, {method:'PATCH',headers:SBH,body:JSON.stringify(data)})
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
+async function sbDelete(table, eq) {
+  const url = new URL(`${SB_URL}/rest/v1/${table}`)
+  Object.entries(eq).forEach(([k,v]) => url.searchParams.set(k, `eq.${v}`))
+  const r = await fetch(url, {method:'DELETE', headers:SBH})
+  if(!r.ok) throw new Error(await r.text())
+}
+async function sbDeleteIn(table, col, vals) {
+  const url = new URL(`${SB_URL}/rest/v1/${table}`)
+  url.searchParams.set(col, `in.(${vals.map(v=>`"${v}"`).join(',')})`)
+  const r = await fetch(url, {method:'DELETE', headers:SBH})
+  if(!r.ok) throw new Error(await r.text())
+}
 async function sbUploadImage(ean, blob) {
   const ext = blob.type==='image/png' ? 'png' : 'jpg'
   const fname = `${ean}_${Date.now()}.${ext}`
@@ -568,19 +712,70 @@ async function sbUploadImage(ean, blob) {
 
 // ─── EAN LOOKUP ────────────────────────────────────────────────────────────
 async function lookupEanOnline(ean) {
-  // UPCitemdb (free, no key, CORS ok)
+  const dbg = []
+
+  // 1. EAN-Search.org — diretta dal browser (GET con token in URL)
+  if (appConfig.ean_search_key) {
+    try {
+      const url = `https://api.ean-search.org/api?token=${encodeURIComponent(appConfig.ean_search_key)}&ean=${encodeURIComponent(ean)}&format=json`
+      const r = await fetch(url)
+      dbg.push(`ean-search: HTTP ${r.status}`)
+      if (r.ok) {
+        const data = await r.json()
+        dbg.push(`ean-search risposta: ${JSON.stringify(data).slice(0,120)}`)
+        if (Array.isArray(data) && data.length && data[0].name) {
+          const p = data[0]
+          return { name:p.name||null, brand:null, category:p.categoryName||null,
+                   description:null, images:[], data_source:'api' }
+        }
+      }
+    } catch(e) { dbg.push(`ean-search ERRORE: ${e.message}`) }
+  } else {
+    dbg.push('ean-search: token non configurato')
+  }
+
+  // 2. Go-UPC — diretta dal browser
+  if (appConfig.go_upc_key) {
+    try {
+      const r = await fetch(`https://api.go-upc.com/v1/code/${encodeURIComponent(ean)}`, {
+        headers: { 'Authorization': `Bearer ${appConfig.go_upc_key}` }
+      })
+      dbg.push(`go-upc: HTTP ${r.status}`)
+      if (r.ok) {
+        const data = await r.json()
+        const p = data.product
+        if (p && p.name) {
+          return { name:p.name||null, brand:p.brand||null, category:p.category||null,
+                   description:p.description||null, images:p.imageUrl?[p.imageUrl]:[], data_source:'api' }
+        }
+      }
+    } catch(e) { dbg.push(`go-upc ERRORE: ${e.message}`) }
+  }
+
+  // 3. Proxy Vercel (aggira CORS — passa le chiavi al server)
   try {
-    const r = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${ean}`)
+    const r = await fetch('/api/ean-lookup', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        ean,
+        ean_search_key: appConfig.ean_search_key || null,
+        go_upc_key:     appConfig.go_upc_key     || null,
+      })
+    })
+    dbg.push(`vercel-proxy: HTTP ${r.status}`)
     if (r.ok) {
       const d = await r.json()
-      if (d.items && d.items.length) {
-        const it = d.items[0]
-        return { name:it.title||null, brand:it.brand||null, category:it.category||null,
-                 description:it.description||null, images:it.images||[], data_source:'api' }
+      if (d.name || d.brand) {
+        return { name:d.name||null, brand:d.brand||null, category:d.category||null,
+                 description:d.description||null, images:d.images||[], data_source:'api' }
       }
     }
-  } catch(e){}
-  // Open Food Facts (for food / household)
+  } catch(e) { dbg.push(`vercel-proxy ERRORE: ${e.message}`) }
+
+  console.warn('[EAN debug]', dbg.join(' | '))
+  window._eanDbg = dbg.join(' · ')
+
+  // 4. Open Food Facts (cibo)
   try {
     const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${ean}.json`)
     if (r.ok) {
@@ -594,7 +789,7 @@ async function lookupEanOnline(ean) {
                  images:img?[img]:[], data_source:'api' }
       }
     }
-  } catch(e){}
+  } catch(e) {}
   return null
 }
 
@@ -712,7 +907,22 @@ async function applyBgRemoval(blob) {
   } catch(e) {
     ;({ removeBackground } = await import('https://esm.sh/@imgly/background-removal@1.4.5'))
   }
-  return await removeBackground(blob)
+  const resultBlob = await removeBackground(blob)
+  // Composite transparent PNG onto white canvas → return JPEG (no transparency)
+  return new Promise((res, rej) => {
+    const img = new Image()
+    img.onload = () => {
+      const c = document.createElement('canvas')
+      c.width = img.width; c.height = img.height
+      const ctx = c.getContext('2d')
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, c.width, c.height)
+      ctx.drawImage(img, 0, 0)
+      c.toBlob(b => b ? res(b) : rej(new Error('Canvas toBlob failed')), 'image/jpeg', 0.92)
+    }
+    img.onerror = rej
+    img.src = URL.createObjectURL(resultBlob)
+  })
 }
 
 // ─── STATE ─────────────────────────────────────────────────────────────────
@@ -827,7 +1037,7 @@ async function loadProducts() {
   document.getElementById('prod-error').classList.add('hidden')
   try {
     const params={
-      select:'id,ean,name,brand,category,images,data_source,shopify_status,amazon_status,shopify_error,amazon_error,description,weight_g,notes',
+      select:'id,ean,name,brand,category,images,data_source,shopify_status,amazon_status,shopify_error,amazon_error,description,weight_g,notes,price,compare_at_price,sku',
       order:'created_at.desc', limit:'500'
     }
     if(currentFilter==='shopify_pending') params.eq={shopify_status:'pending'}
@@ -859,13 +1069,19 @@ function renderTable() {
       <td class="p-3 font-mono text-xs text-gray-400">${p.ean}</td>
       <td class="p-3 font-medium text-gray-800 max-w-xs"><span class="line-clamp-2">${p.name||'<span class="text-gray-300 italic font-normal">—</span>'}</span></td>
       <td class="p-3 text-gray-500 text-xs">${p.brand||'—'}</td>
+      <td class="p-3 text-sm font-medium text-gray-700">${p.price!=null?'€'+Number(p.price).toFixed(2):'<span class="text-red-400 text-xs font-normal">mancante</span>'}</td>
       <td class="p-3">${src(p.data_source)}</td>
       <td class="p-3">${st(p.shopify_status)}</td>
       <td class="p-3">${st(p.amazon_status)}</td>
       <td class="p-3"><div class="flex flex-col gap-1">
-        ${p.shopify_status!=='uploaded'?`<button onclick="uploadOne('${p.id}','shopify')" class="text-xs px-2 py-1 rounded-lg text-white bg-brand-500">↑ Shopify</button>`:''}
-        ${p.amazon_status!=='uploaded'?`<button onclick="uploadOne('${p.id}','amazon')" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#FF9900">↑ Amazon</button>`:''}
+        ${p.shopify_status==='uploaded'
+          ?`<button onclick="unloadOne('${p.id}','shopify')" class="text-xs px-2 py-1 rounded-lg text-white bg-brand-700 hover:bg-brand-800">↓ Shopify</button>`
+          :`<button onclick="uploadOne('${p.id}','shopify')" class="text-xs px-2 py-1 rounded-lg text-white bg-brand-500 hover:bg-brand-600">↑ Shopify</button>`}
+        ${p.amazon_status==='uploaded'
+          ?`<button onclick="unloadOne('${p.id}','amazon')" class="text-xs px-2 py-1 rounded-lg text-white hover:opacity-80" style="background:#b36b00">↓ Amazon</button>`
+          :`<button onclick="uploadOne('${p.id}','amazon')" class="text-xs px-2 py-1 rounded-lg text-white hover:opacity-80" style="background:#FF9900">↑ Amazon</button>`}
         <button onclick="openEdit('${p.id}')" class="text-xs px-2 py-1 rounded-lg bg-gray-100 text-gray-600">✎ Modifica</button>
+        <button onclick="deleteProduct('${p.id}')" class="text-xs px-2 py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">🗑 Elimina</button>
       </div></td>
     </tr>`
   }).join('')
@@ -882,12 +1098,22 @@ function renderCards() {
       <div class="flex-1 min-w-0">
         <p class="font-medium text-gray-800 text-sm leading-tight line-clamp-2">${p.name||'<span class="text-gray-400 italic">Nome mancante</span>'}</p>
         <p class="text-xs text-gray-400 mt-0.5">${p.brand?p.brand+' · ':''}<span class="font-mono">${p.ean}</span></p>
-        <div class="flex items-center gap-3 mt-2">
+        <p class="text-sm font-semibold text-brand-600 mt-0.5">${p.price!=null?'€'+Number(p.price).toFixed(2):'<span class="text-xs font-normal text-red-400">prezzo mancante</span>'}</p>
+        <div class="flex items-center gap-3 mt-1.5">
           <span class="inline-flex items-center gap-1 text-xs text-gray-500"><span class="w-2 h-2 rounded-full ${dot(p.shopify_status)}"></span>Shopify</span>
           <span class="inline-flex items-center gap-1 text-xs text-gray-500"><span class="w-2 h-2 rounded-full ${dot(p.amazon_status)}"></span>Amazon</span>
         </div>
       </div>
-      <button onclick="openEdit('${p.id}')" class="flex-shrink-0 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium">✎</button>
+      <div class="flex flex-col gap-1 flex-shrink-0">
+        ${p.shopify_status==='uploaded'
+          ?`<button onclick="unloadOne('${p.id}','shopify')" class="px-3 py-1.5 rounded-lg text-white text-xs font-medium bg-brand-700">↓S</button>`
+          :`<button onclick="uploadOne('${p.id}','shopify')" class="px-3 py-1.5 rounded-lg text-white text-xs font-medium bg-brand-500">↑S</button>`}
+        ${p.amazon_status==='uploaded'
+          ?`<button onclick="unloadOne('${p.id}','amazon')" class="px-3 py-1.5 rounded-lg text-white text-xs font-medium" style="background:#b36b00">↓A</button>`
+          :`<button onclick="uploadOne('${p.id}','amazon')" class="px-3 py-1.5 rounded-lg text-white text-xs font-medium" style="background:#FF9900">↑A</button>`}
+        <button onclick="openEdit('${p.id}')" class="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium">✎</button>
+        <button onclick="deleteProduct('${p.id}')" class="px-3 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-medium hover:bg-red-100">🗑</button>
+      </div>
     </div>`
   }).join('')
 }
@@ -903,19 +1129,26 @@ async function uploadToShopify(p) {
   const shop  = appConfig.shopify_domain
   const token = appConfig.shopify_token
   if (!shop || !token) throw new Error('Configura Shopify nelle impostazioni ⚙️')
+  if (p.price == null) throw new Error('Inserisci il prezzo prima di caricare su Shopify')
   const product = {
     title:        p.name || p.ean,
     vendor:       p.brand  || '',
     product_type: p.category || '',
     body_html:    p.description || '',
-    variants: [{ barcode: p.ean, ...(p.weight_g ? {weight: +(p.weight_g/1000).toFixed(3), weight_unit:'kg'} : {}) }]
+    variants: [{
+      price:           p.price.toString(),
+      ...(p.compare_at_price != null ? {compare_at_price: p.compare_at_price.toString()} : {}),
+      ...(p.sku             ? {sku: p.sku}                                               : {}),
+      barcode:         p.ean,
+      ...(p.weight_g        ? {weight: +(p.weight_g/1000).toFixed(3), weight_unit:'kg'} : {})
+    }]
   }
   if (p.images && p.images.length) {
     product.images = p.images.filter(Boolean).map(img => ({
       attachment: img.replace(/^data:image\/\w+;base64,/, '')
     }))
   }
-  const resp = await fetch('/.netlify/functions/shopify-proxy', {
+  const resp = await fetch('/api/shopify-proxy', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({shop, token, product})
   })
@@ -968,10 +1201,106 @@ async function bulkUpload(platform) {
   showToast(`✓ Shopify: ${ok} caricati${err?', '+err+' errori':''}!`, err?'error':'success')
 }
 
+// ─── UNLOAD FROM PLATFORM ─────────────────────────────────────────────────
+async function unloadFromShopify(p) {
+  const shop  = appConfig.shopify_domain
+  const token = appConfig.shopify_token
+  if (!shop || !token) throw new Error('Configura Shopify nelle impostazioni ⚙️')
+  if (!p.shopify_product_id) throw new Error('Product ID Shopify non trovato — prodotto non rimovibile via API')
+  const resp = await fetch('/api/shopify-proxy', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({shop, token, action:'delete', shopify_id: p.shopify_product_id})
+  })
+  if (!resp.ok && resp.status !== 404) {
+    const data = await resp.json().catch(()=>({}))
+    throw new Error(data.error || `Shopify ${resp.status}`)
+  }
+}
+
+async function unloadOne(id, platform) {
+  const p = allProducts.find(x=>x.id===id); if(!p) return
+  const label = platform==='shopify' ? 'Shopify' : 'Amazon'
+  if (platform === 'amazon') { showToast('Amazon non ancora implementato', 'info'); return }
+
+  // Se manca il product ID non possiamo chiamare l'API
+  if (!p.shopify_product_id) {
+    if (!confirm(`ID Shopify non trovato per "${p.name||p.ean}".\nImpossibile rimuoverlo via API — rimuovilo manualmente da Shopify.\n\nVuoi comunque resettare lo stato a "pending" nell'app?`)) return
+    await sbUpdate('products', {shopify_status:'pending', shopify_product_id:null, shopify_uploaded_at:null, shopify_error:null}, {id})
+    p.shopify_status='pending'; p.shopify_product_id=null
+    renderTable(); renderCards()
+    showToast('Status resettato a pending', 'info')
+    return
+  }
+
+  if (!confirm(`Rimuovere "${p.name||p.ean}" da ${label}?`)) return
+  showToast(`Rimozione da ${label}...`, 'info')
+  try {
+    await unloadFromShopify(p)
+    await sbUpdate('products', {shopify_status:'pending', shopify_product_id:null, shopify_uploaded_at:null, shopify_error:null}, {id})
+    p.shopify_status='pending'; p.shopify_product_id=null
+    renderTable(); renderCards()
+    showToast(`✓ Rimosso da ${label}!`, 'success')
+  } catch(e) { showToast('Errore: '+e.message, 'error') }
+}
+
+// ─── DELETE ────────────────────────────────────────────────────────────────
+async function deleteProduct(id) {
+  const p = allProducts.find(x=>x.id===id)
+  const name = p?.name || p?.ean || 'questo prodotto'
+  if (!confirm(`Eliminare "${name}"?\nQuesta azione non può essere annullata.`)) return
+  const onShopify = p?.shopify_status === 'uploaded'
+  let removeShopify = false
+  if (onShopify) {
+    if (!p.shopify_product_id) {
+      if (!confirm(`Il prodotto risulta caricato su Shopify ma l'ID non è salvato nell'app.\nDevi rimuoverlo manualmente da Shopify admin.\n\nProcedere comunque con l'eliminazione dall'app?`)) return
+    } else {
+      removeShopify = confirm(`Il prodotto è presente su Shopify.\nEliminarlo anche da Shopify?`)
+    }
+  }
+  try {
+    if (removeShopify) {
+      try { await unloadFromShopify(p) }
+      catch(e) { showToast('Avviso Shopify: '+e.message, 'error'); return }
+    }
+    await sbDelete('products', {id})
+    allProducts = allProducts.filter(x=>x.id!==id)
+    selected.delete(id)
+    renderTable(); renderCards(); updateBulkBar()
+    showToast('✓ Prodotto eliminato', 'success')
+    loadDashboard()
+  } catch(e) { showToast('Errore: '+e.message, 'error') }
+}
+
+async function bulkDelete() {
+  const ids = [...selected]
+  if (!ids.length) return
+  if (!confirm(`Eliminare ${ids.length} prodotti selezionati?\nQuesta azione non può essere annullata.`)) return
+  const onShopify = ids.filter(id => {
+    const p = allProducts.find(x=>x.id===id)
+    return p?.shopify_status==='uploaded' && p?.shopify_product_id
+  })
+  let removeShopify = false
+  if (onShopify.length) removeShopify = confirm(`${onShopify.length} prodott${onShopify.length>1?'i':'o'} ${onShopify.length>1?'sono':'è'} su Shopify.\nEliminare anche da Shopify?`)
+  showToast('Eliminazione in corso...', 'info')
+  try {
+    if (removeShopify) {
+      for (const id of onShopify) {
+        const p = allProducts.find(x=>x.id===id)
+        try { await unloadFromShopify(p) } catch(e) {}
+      }
+    }
+    await sbDeleteIn('products', 'id', ids)
+    allProducts = allProducts.filter(x=>!ids.includes(x.id))
+    clearSelection(); renderTable(); renderCards()
+    showToast(`✓ ${ids.length} prodotti eliminati`, 'success')
+    loadDashboard()
+  } catch(e) { showToast('Errore: '+e.message, 'error') }
+}
+
 // ─── ADD PRODUCT MODAL ─────────────────────────────────────────────────────
 function openAddModal(){
   addPhotoBlob=null;addPhotoUrl=null;addCurrentEan=''
-  ;['add-name','add-brand','add-desc','add-weight'].forEach(id=>document.getElementById(id).value='')
+  ;['add-name','add-brand','add-desc','add-weight','add-price','add-compare-price','add-sku'].forEach(id=>document.getElementById(id).value='')
   document.getElementById('add-category').value=''
   document.getElementById('add-ean-input').value=''
   document.getElementById('add-ean-msg').classList.add('hidden')
@@ -981,6 +1310,7 @@ function openAddModal(){
   document.getElementById('add-photo-actions').classList.add('hidden')
   document.getElementById('add-found-banner').classList.add('hidden')
   document.getElementById('add-notfound-banner').classList.add('hidden')
+  document.getElementById('add-debug-banner').classList.add('hidden')
   document.getElementById('add-photo-file').value=''
   document.getElementById('add-ai-status').textContent=''
   document.getElementById('add-modal').classList.remove('hidden')
@@ -1013,7 +1343,10 @@ async function searchEan(){
       if(found.description) document.getElementById('add-desc').value=found.description
     }else{
       document.getElementById('add-found-banner').classList.add('hidden')
-      document.getElementById('add-notfound-banner').classList.remove('hidden')
+      const nb = document.getElementById('add-notfound-banner')
+      nb.innerHTML = '⚠ Prodotto non trovato online. Compila i campi o usa la foto per l\'analisi AI.'
+        + (window._eanDbg ? `<br><span class="font-mono text-xs opacity-60">${window._eanDbg}</span>` : '')
+      nb.classList.remove('hidden')
     }
   }catch(e){showEanMsg('Errore: '+e.message,'error')}
   finally{setBtn('add-search',false)}
@@ -1097,12 +1430,17 @@ async function saveNewProduct(){
       catch(e){ showToast('Errore compressione foto: '+e.message,'error') }
     }
     const name=document.getElementById('add-name').value.trim()
+    const priceVal = parseFloat(document.getElementById('add-price').value)
+    const cmpVal   = parseFloat(document.getElementById('add-compare-price').value)
     await sbInsert('products',{
       ean, name:name||null,
       brand:document.getElementById('add-brand').value.trim()||null,
       category:document.getElementById('add-category').value||null,
       weight_g:parseInt(document.getElementById('add-weight').value)||null,
       description:document.getElementById('add-desc').value.trim()||null,
+      price: isNaN(priceVal) ? null : priceVal,
+      compare_at_price: isNaN(cmpVal) ? null : cmpVal,
+      sku: document.getElementById('add-sku').value.trim()||null,
       images, data_source:name?'manual':'pending'
     })
     closeAddModal(); showToast('✓ Prodotto aggiunto!','success')
@@ -1123,6 +1461,9 @@ function openEdit(id){
   document.getElementById('edit-weight').value=p.weight_g||''
   document.getElementById('edit-desc').value=p.description||''
   document.getElementById('edit-notes').value=p.notes||''
+  document.getElementById('edit-price').value=p.price!=null?p.price:''
+  document.getElementById('edit-compare-price').value=p.compare_at_price!=null?p.compare_at_price:''
+  document.getElementById('edit-sku').value=p.sku||''
   document.getElementById('edit-photo-preview').classList.add('hidden')
   document.getElementById('edit-photo-actions').classList.add('hidden')
   document.getElementById('edit-photo-file').value=''
@@ -1197,6 +1538,8 @@ async function saveEdit(){
       try{ images=[await imageToDataUrl(editPhotoBlob),...images.slice(1)] }
       catch(e){ showToast('Errore compressione foto: '+e.message,'error') }
     }
+    const priceVal = parseFloat(document.getElementById('edit-price').value)
+    const cmpVal   = parseFloat(document.getElementById('edit-compare-price').value)
     const upd={
       name:document.getElementById('edit-name').value.trim()||null,
       brand:document.getElementById('edit-brand').value.trim()||null,
@@ -1204,6 +1547,9 @@ async function saveEdit(){
       weight_g:parseInt(document.getElementById('edit-weight').value)||null,
       description:document.getElementById('edit-desc').value.trim()||null,
       notes:document.getElementById('edit-notes').value.trim()||null,
+      price: isNaN(priceVal) ? null : priceVal,
+      compare_at_price: isNaN(cmpVal) ? null : cmpVal,
+      sku: document.getElementById('edit-sku').value.trim()||null,
       images:images.filter(Boolean), data_source:'manual'
     }
     await sbUpdate('products',upd,{id})
@@ -1218,6 +1564,10 @@ async function saveEdit(){
 const CONFIG_DEFS = [
   { section:'✨ OpenAI', color:'purple', fields:[
     { key:'openai_key', label:'API Key', placeholder:'sk-proj-...', apply: v => OPENAI_KEY=v }
+  ]},
+  { section:'🔍 EAN Lookup', color:'blue', fields:[
+    { key:'ean_search_key', label:'EAN-Search — Token (consigliato 🇮🇹)', placeholder:'Il tuo token da ean-search.org → My Account' },
+    { key:'go_upc_key',     label:'Go-UPC — API Key (opzionale 🇺🇸)', placeholder:'Solo se hai un account su go-upc.com' },
   ]},
   { section:'🛍️ Shopify', color:'green', fields:[
     { key:'shopify_domain', label:'Shop Domain', placeholder:'negozio.myshopify.com' },
@@ -1234,18 +1584,16 @@ const CONFIG_DEFS = [
   ]}
 ]
 
-// ─── CRYPTO (AES-256-GCM, device key in localStorage) ──────────────────────
+// ─── CRYPTO (AES-256-GCM, chiave derivata da SB_URL — uguale su tutti i dispositivi) ──
 async function getCryptoKey() {
-  let raw = localStorage.getItem('rh_dk')
-  if (!raw) {
-    const k = await crypto.subtle.generateKey({name:'AES-GCM',length:256}, true, ['encrypt','decrypt'])
-    const exp = await crypto.subtle.exportKey('raw', k)
-    raw = btoa(String.fromCharCode(...new Uint8Array(exp)))
-    localStorage.setItem('rh_dk', raw)
-    return k
-  }
-  return crypto.subtle.importKey('raw', Uint8Array.from(atob(raw),c=>c.charCodeAt(0)),
-    {name:'AES-GCM',length:256}, false, ['encrypt','decrypt'])
+  const material = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(SB_URL),
+    {name:'PBKDF2'}, false, ['deriveKey']
+  )
+  return crypto.subtle.deriveKey(
+    {name:'PBKDF2', salt: new TextEncoder().encode('righouse-cfg-v2'), iterations: 100000, hash:'SHA-256'},
+    material, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']
+  )
 }
 async function encryptStr(ck, str) {
   const iv = crypto.getRandomValues(new Uint8Array(12))
@@ -1261,10 +1609,12 @@ async function decryptStr(ck, b64) {
 
 // ─── CONFIG LOAD/SAVE ──────────────────────────────────────────────────────
 let appConfig = {}
+let configExists = new Set() // keys present in DB (regardless of which device saved them)
 async function loadConfig() {
   try {
     const rows = await sbSelect('config', {select:'key,value'})
     if (!Array.isArray(rows)) return false
+    configExists = new Set(rows.map(r => r.key))
     const ck = await getCryptoKey()
     appConfig = {}
     for (const row of rows) {
@@ -1318,7 +1668,7 @@ function renderCfg() {
 }
 
 function renderCfgField(f, editing=false) {
-  const has = !!appConfig[f.key]
+  const has = configExists.has(f.key)
   if (editing || !has) {
     return `<div id="cfg-${f.key}" class="space-y-1">
       <label class="text-xs text-gray-500">${f.label}</label>
@@ -1368,6 +1718,143 @@ async function saveField(key) {
   }
 }
 
+// ─── CSV IMPORT ────────────────────────────────────────────────────────────
+let csvParsedRows = []
+
+function openCsvHelp()    { document.getElementById('csv-help-modal').classList.remove('hidden') }
+function closeCsvHelp()   { document.getElementById('csv-help-modal').classList.add('hidden') }
+function closeCsvPreview(){ document.getElementById('csv-preview-modal').classList.add('hidden'); csvParsedRows=[] }
+function triggerCsvImport(){ document.getElementById('csv-file-input').value=''; document.getElementById('csv-file-input').click() }
+
+// Alias map: csv column name → db column name
+const CSV_ALIASES = {
+  nome:'name', marca:'brand', categoria:'category', prezzo:'price',
+  prezzo_barrato:'compare_at_price', peso_g:'weight_g', peso:'weight_g',
+  descrizione:'description', note:'notes'
+}
+const CSV_KNOWN = ['ean','name','brand','category','price','compare_at_price','sku','weight_g','description','notes']
+
+function parseCsvText(text) {
+  // Remove BOM
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1)
+  // Detect separator
+  const firstLine = text.split(/\r?\n/)[0]
+  const sep = (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ','
+  // Split lines
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) throw new Error('Il file CSV deve avere almeno una riga di intestazione e una di dati')
+  // Parse header
+  const rawHeaders = parseCSVLine(lines[0], sep).map(h => h.trim().toLowerCase())
+  const headers = rawHeaders.map(h => CSV_ALIASES[h] || h)
+  // Parse rows
+  const rows = []
+  for (let i = 1; i < lines.length; i++) {
+    const vals = parseCSVLine(lines[i], sep)
+    if (vals.every(v => !v.trim())) continue
+    const row = {}
+    headers.forEach((h, idx) => { if (CSV_KNOWN.includes(h)) row[h] = vals[idx]?.trim() || null })
+    rows.push(row)
+  }
+  return rows
+}
+
+function parseCSVLine(line, sep) {
+  const result = []; let cur = ''; let inQ = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"') {
+      if (inQ && line[i+1] === '"') { cur += '"'; i++ }
+      else inQ = !inQ
+    } else if (ch === sep && !inQ) { result.push(cur); cur = '' }
+    else cur += ch
+  }
+  result.push(cur)
+  return result
+}
+
+function handleCsvFile(e) {
+  const file = e.target.files[0]; if (!file) return
+  const reader = new FileReader()
+  reader.onload = ev => {
+    try {
+      const rows = parseCsvText(ev.target.result)
+      if (!rows.length) { showToast('Nessuna riga trovata nel CSV', 'error'); return }
+      csvParsedRows = rows
+      showCsvPreview(rows)
+    } catch(err) { showToast('Errore CSV: '+err.message, 'error') }
+  }
+  reader.readAsText(file, 'UTF-8')
+}
+
+function showCsvPreview(rows) {
+  const noEan = rows.filter(r => !r.ean).length
+  const noName = rows.filter(r => !r.name).length
+  const noPrice = rows.filter(r => !r.price).length
+  const statsEl = document.getElementById('csv-preview-stats')
+  statsEl.innerHTML = `<span class="font-semibold text-brand-600">${rows.length}</span> prodotti trovati nel file.`
+  const warnEl = document.getElementById('csv-preview-warnings')
+  const warns = []
+  if (noEan)   warns.push(`⚠ ${noEan} riga${noEan>1?'e':''} senza EAN — verranno ignorate`)
+  if (noName)  warns.push(`⚠ ${noName} prodott${noName>1?'i':'o'} senza nome`)
+  if (noPrice) warns.push(`⚠ ${noPrice} prodott${noPrice>1?'i':'o'} senza prezzo (non caricabili su Shopify)`)
+  if (warns.length) { warnEl.innerHTML = warns.map(w=>`<p>${w}</p>`).join(''); warnEl.classList.remove('hidden') }
+  else warnEl.classList.add('hidden')
+  // Preview table
+  const preview = rows.slice(0,5)
+  const cols = ['ean','name','price','brand','category']
+  const rowsEl = document.getElementById('csv-preview-rows')
+  rowsEl.innerHTML = `<table class="w-full border-collapse"><thead><tr>${
+    cols.map(c=>`<th class="border border-gray-200 px-2 py-1.5 bg-gray-50 font-medium text-gray-600 text-left whitespace-nowrap">${c}</th>`).join('')
+  }</tr></thead><tbody>${
+    preview.map(r=>`<tr>${cols.map(c=>`<td class="border border-gray-200 px-2 py-1.5 max-w-[140px] truncate">${r[c]||'<span class="text-gray-300">—</span>'}</td>`).join('')}</tr>`).join('')
+  }${rows.length>5?`<tr><td colspan="${cols.length}" class="border border-gray-200 px-2 py-1.5 text-center text-gray-400">... e altri ${rows.length-5}</td></tr>`:''}</tbody></table>`
+  document.getElementById('csv-confirm-label').textContent = `Importa ${rows.length} prodotti`
+  document.getElementById('csv-preview-modal').classList.remove('hidden')
+}
+
+async function confirmCsvImport() {
+  const rows = csvParsedRows.filter(r => r.ean)
+  if (!rows.length) { showToast('Nessuna riga valida (EAN mancante)', 'error'); return }
+  document.getElementById('csv-confirm-spin').classList.remove('hidden')
+  document.getElementById('csv-confirm-label').textContent = 'Importazione...'
+  document.getElementById('csv-confirm-btn').disabled = true
+  try {
+    // Normalize types
+    const toInsert = rows.map(r => ({
+      ean: r.ean,
+      name: r.name || null,
+      brand: r.brand || null,
+      category: r.category || null,
+      price: r.price ? parseFloat(r.price.replace(',','.')) || null : null,
+      compare_at_price: r.compare_at_price ? parseFloat(r.compare_at_price.replace(',','.')) || null : null,
+      sku: r.sku || null,
+      weight_g: r.weight_g ? parseInt(r.weight_g) || null : null,
+      description: r.description || null,
+      notes: r.notes || null,
+      data_source: r.name ? 'manual' : 'pending',
+      images: []
+    }))
+    // Batch upsert (50 at a time)
+    const BATCH = 50
+    for (let i = 0; i < toInsert.length; i += BATCH) {
+      await sbUpsert('products', toInsert.slice(i, i+BATCH))
+    }
+    closeCsvPreview()
+    showToast(`✓ ${rows.length} prodotti importati!`, 'success')
+    loadProducts(); loadDashboard()
+  } catch(e) {
+    showToast('Errore importazione: '+e.message, 'error')
+  } finally {
+    document.getElementById('csv-confirm-spin').classList.add('hidden')
+    document.getElementById('csv-confirm-label').textContent = `Importa ${rows.length} prodotti`
+    document.getElementById('csv-confirm-btn').disabled = false
+  }
+}
+
+// Close on backdrop click
+document.getElementById('csv-help-modal')?.addEventListener('click', e => { if(e.target===document.getElementById('csv-help-modal')) closeCsvHelp() })
+document.getElementById('csv-preview-modal')?.addEventListener('click', e => { if(e.target===document.getElementById('csv-preview-modal')) closeCsvPreview() })
+
 // ─── HELPERS ───────────────────────────────────────────────────────────────
 function setBtn(prefix,loading){
   const spin=document.getElementById(prefix+'-spin'), btn=document.getElementById(prefix+'-btn')
@@ -1379,12 +1866,12 @@ function setBtn(prefix,loading){
 }
 
 let toastTimer=null
-function showToast(msg,type='info'){
+function showToast(msg,type='info',duration=4000){
   const t=document.getElementById('toast')
   const bg={success:'bg-green-700',error:'bg-red-700',info:'bg-gray-900'}[type]
   t.className=`fixed top-5 right-5 z-50 text-white text-sm px-4 py-3 rounded-xl shadow-xl max-w-xs transition-all duration-300 ${bg}`
   t.textContent=msg; t.style.opacity='1'; t.style.transform='translateY(0)'
-  clearTimeout(toastTimer); toastTimer=setTimeout(()=>{t.style.opacity='0';t.style.transform='translateY(-8px)'},4000)
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>{t.style.opacity='0';t.style.transform='translateY(-8px)'},duration)
 }
 </script>
 </body>
